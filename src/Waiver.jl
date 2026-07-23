@@ -10,7 +10,9 @@ using LinearAlgebra
 using Match
 using Base.Threads
 using PrecompileTools
-using MacroTools: @capture
+using MacroTools: @capture, postwalk, prewalk
+using MacroTools: splitdef, splitarg, rmlines
+using MacroTools: prettify, unblock
 using Base.Iterators
 using FLoops
 using EllipsisNotation

@@ -1,6 +1,6 @@
 name = "Waiver"
 uuid = "74ff6220-5812-4795-9b9a-063b3f9b9c6a"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Henry Eshbaugh <henry.eshbaugh@physics.ox.ac.uk>"]
 
 [deps]
