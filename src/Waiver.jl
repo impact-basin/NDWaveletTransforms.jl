@@ -16,6 +16,8 @@ using MacroTools: prettify, unblock
 using Base.Iterators
 using FLoops
 using EllipsisNotation
+using Strided
+using TiffImages
 # memoization... ?
 
 include("algorithms.jl")
@@ -23,6 +25,7 @@ export complement
 export mprime
 export cyclespin!
 export cyclespinning!
+export @turbofun
 
 include("bases.jl")
 export WT_LEVELS
@@ -81,22 +84,6 @@ export nswpt
 export nsiwpt!
 export nsiwpt
 
-@compile_workload begin
-    x = rand(Float32, 128)
-    y = nsdwt(x, WT_HAAR, 3)
-    x = nsidwt(y, WT_HAAR, 3)
-    y = nswpt(x, WT_HAAR, 3)
-    x = nsiwpt(y, WT_HAAR, 3)
-    x = rand(Float32, (128, 128))
-    y = nsdwt(x, WT_HAAR, 3)
-    x = nsidwt(x, WT_HAAR, 3)
-    y = nswpt(x, WT_HAAR, (3, 4))
-    x = nsiwpt(y, WT_HAAR, (3, 4))
-    x = rand(Float32, (128, 128, 128))
-    y = nsdwt(x, WT_HAAR, 3)
-    x = nsidwt(x, WT_HAAR, 3)
-    y = nswpt(x, WT_HAAR, (3, 4, 5))
-    x = nsiwpt(y, WT_HAAR, (3, 4, 5))
-end
+include("precompile.jl")
 
 end # module Waiver

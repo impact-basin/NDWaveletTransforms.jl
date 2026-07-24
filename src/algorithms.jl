@@ -154,3 +154,9 @@ function complement(ψ::SVector{N,T}) :: SVector{N, T} where {N, T}
 end
 
 labs(x) = log10.(abs.(x) .+ eps())
+
+macro turbofun(expr)
+    return quote
+        Base.@constprop :aggressive Base.@propagate_inbounds $expr
+    end |> esc
+end

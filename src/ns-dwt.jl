@@ -33,39 +33,65 @@
 #         w[i] += φ[k] * x[idx] + ψ[k] * x[idx + l]
 #     end
 # end
-#
-function _nsdwtinner_loop!(
+
+@turbofun function _nsdwt_inner_loop!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
-    b :: WTOrthogonalBasis{N, T},
-) :: Nothing where {T <: Number, N}
+    b :: WTOrthogonalBasis{2, F},
+) :: Nothing where {T <: Number, F <: Number}
 
     ls = @view w[1:end>>1]
     hs = @view w[(end>>1)+1:end]
 
     for (outi, sigi) in enumerate(1:2:length(x)-1)
-        @inbounds @fastmath @views ls[outi] = dot(b.φ, x[sigi:sigi+b.n-1])
-        @inbounds @fastmath @views hs[outi] = dot(b.ψ, x[sigi:sigi+b.n-1])
+        @fastmath @views ls[outi] = dot(T.(b.φ), x[sigi:sigi+1])
+        @fastmath @views hs[outi] = dot(T.(b.ψ), x[sigi:sigi+1])
     end
 end
 
-function _insdwtinner_loop!(
+@turbofun function _nsdwt_inner_loop!(
+    x :: AbstractArray{T,1},
+    w :: AbstractArray{T,1},
+    b :: WTOrthogonalBasis{N, F},
+) :: Nothing where {T <: Number, F <: Number, N}
+
+    ls = @view w[1:end>>1]
+    hs = @view w[(end>>1)+1:end]
+
+    for (outi, sigi) in enumerate(1:2:length(x)-1)
+        @fastmath @views ls[outi] = dot(T.(b.φ), x[mod1.(sigi:sigi+N-1, end)])
+        @fastmath @views hs[outi] = dot(T.(b.ψ), x[mod1.(sigi:sigi+N-1, end)])
+    end
+end
+
+@turbofun function _insdwt_inner_loop!(
     x :: AbstractArray{T,1},
     ls :: SubArray{T, 1},
     hs :: SubArray{T, 1},
     w :: AbstractArray{T,1},
-    b :: WTOrthogonalBasis{N, T},
-) :: Nothing where {T <: Number, N}
-    @inbounds for (i, j) in enumerate(1:2:length(x)-1)
-        # FIXME: clamp!
-        @fastmath @views w[j:j+b.n-1] .+=
-            ls[i] .* b.φ .+ hs[i] .* b.ψ
+    b :: WTOrthogonalBasis{2, F},
+) :: Nothing where {T <: Number, F <: Number}
+    for (i, j) in enumerate(1:2:length(x)-1)
+        @fastmath @views w[j:j+1] .+=
+            ls[i] .* T.(b.φ) .+ hs[i] .* T.(b.ψ)
     end
 end
 
+@turbofun function _insdwt_inner_loop!(
+    x :: AbstractArray{T,1},
+    ls :: SubArray{T, 1},
+    hs :: SubArray{T, 1},
+    w :: AbstractArray{T,1},
+    b :: WTOrthogonalBasis{N, F},
+) :: Nothing where {T <: Number, N, F <: Number}
+    for (i, j) in enumerate(1:2:length(x)-1)
+        @fastmath @views w[mod1.(j:j+N-1, end)] .+=
+            ls[i] .* T.(b.φ) .+ hs[i] .* T.(b.ψ)
+    end
+end
 
 # Discrete wavelet transform, 1-D
-Base.@constprop :aggressive Base.@propagate_inbounds function _dwt!(
+@turbofun function _dwt!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
     b :: WTOrthogonalBasis,
@@ -75,7 +101,7 @@ Base.@constprop :aggressive Base.@propagate_inbounds function _dwt!(
 
     level <= 0 && return x
 
-    _nsdwtinner_loop!(x, w, b)
+    _nsdwt_inner_loop!(x, w, b)
     copyto!(x, w)
     if level > 1
         @inbounds _dwt!(@view(x[1:end>>1]), @view(w[1:end>>1]), b, level-1; wpt=wpt)
@@ -85,7 +111,7 @@ Base.@constprop :aggressive Base.@propagate_inbounds function _dwt!(
     return x
 end
 
-Base.@constprop :aggressive Base.@propagate_inbounds function _idwt!(
+@turbofun function _idwt!(
     x :: AbstractArray{T, 1},
     w :: AbstractArray{T, 1},
     b :: WTOrthogonalBasis,
@@ -114,7 +140,7 @@ Base.@constprop :aggressive Base.@propagate_inbounds function _idwt!(
 
     w .= zero(T)
 
-    _insdwtinner_loop!(x, ls, hs, w, b)
+    _insdwt_inner_loop!(x, ls, hs, w, b)
 
     copyto!(x, w)
     return x

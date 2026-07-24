@@ -117,8 +117,13 @@ wtlevels(x::Int)             = trailing_zeros(x)
 wtlevels(x::Tuple{Int, Int}) = (wtlevels(x[1]), wtlevels(x[2]))
 
 function testimage(s::String) :: Matrix{Float64}
-    dir = @__DIR__
-    TiffImages.load(dir * "/testimages/" * s * ".tif") |> Matrix{Float64} |> rotr90
+    TiffImages.load(
+        joinpath(
+            @__DIR__,
+            "bundle",
+            s * ".tif",
+        ),
+    ) |> Matrix{Float64} |> rotr90
 end
 
 
