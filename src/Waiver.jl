@@ -16,9 +16,11 @@ using MacroTools: prettify, unblock
 using Base.Iterators
 using FLoops
 using EllipsisNotation
-using Strided
+# using Strided
 using TiffImages
 # memoization... ?
+using CUDA
+using KernelAbstractions
 
 include("algorithms.jl")
 export complement
@@ -67,12 +69,12 @@ export wpt_bands
 export sbviews
 export subspaces
 
-# include("dwt-kernels.jl")
-# include("dwt-dispatch.jl")
-# export dwt!
-# export idwt!
-# export dwt
-# export idwt
+include("gpu-kernels.jl")
+include("gpu-dispatch.jl")
+export dwt!
+export idwt!
+export dwt
+export idwt
 
 include("ns-dwt.jl")
 export nsdwt!

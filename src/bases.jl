@@ -84,8 +84,8 @@ function to_blocks(v::AbstractArray{T,1}) where T <: Number
     join(s)
 end
 
-function Base.show(io::IO, w::WTOrthogonalBasis)
-    print(io, styled"{bold:$(w.n)-tap Orthogonal Basis}: ",
+function Base.show(io::IO, w::WTOrthogonalBasis{N,F}) where {N, F}
+    print(io, styled"{bold:$N-tap Orthogonal Basis}: ",
               styled"φ {bold,blue:▕}$(to_blocks(w.φ)){bold,blue:▏},", styled"ψ {bold,blue:▕}$(to_blocks(w.ψ)){bold,blue:▏}")
 end
 

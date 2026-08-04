@@ -1,13 +1,13 @@
 function dwtk!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F};
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 1}}
+    b::WTOrthogonalBasis{N, G};
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 1}}
     gpu = KernelAbstractions.get_backend(x)
     ls, hs = sbviews(w)
     dwt_1d! = _dwt_1d_kernel!(gpu)
-    dwt_1d!(ls, x, b.φ, ndrange = length(x) >> 1)
-    dwt_1d!(hs, x, b.ψ, ndrange = length(x) >> 1)
+    dwt_1d!(ls, x, F.(b.φ), ndrange = length(x) >> 1)
+    dwt_1d!(hs, x, F.(b.ψ), ndrange = length(x) >> 1)
     nothing
 end
 
@@ -16,26 +16,26 @@ end
 function dwtk!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F};
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+    b::WTOrthogonalBasis{N, G};
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
     gpu = KernelAbstractions.get_backend(x)
     Nx, Ny = size(x)
     ll, lh, hl, hh = sbviews(w)
     dwt_2d! = _dwt_2d_kernel!(gpu)
-    dwt_2d!(ll, x, b.φφ, ndrange = (Nx >> 1, Ny >> 1))
-    dwt_2d!(lh, x, b.φψ, ndrange = (Nx >> 1, Ny >> 1))
-    dwt_2d!(hl, x, b.ψφ, ndrange = (Nx >> 1, Ny >> 1))
-    dwt_2d!(hh, x, b.ψψ, ndrange = (Nx >> 1, Ny >> 1))
+    dwt_2d!(ll, x, F.(b.φφ), ndrange = (Nx >> 1, Ny >> 1))
+    dwt_2d!(lh, x, F.(b.φψ), ndrange = (Nx >> 1, Ny >> 1))
+    dwt_2d!(hl, x, F.(b.ψφ), ndrange = (Nx >> 1, Ny >> 1))
+    dwt_2d!(hh, x, F.(b.ψψ), ndrange = (Nx >> 1, Ny >> 1))
     nothing
 end
 
 function dwt!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l::Int;
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 1}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 1}}
     dwtk!(w, x, b)
     x .= w
     if l > 1
@@ -49,10 +49,10 @@ end
 function dwt!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l::Int;
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
     dwtk!(w, x, b)
     x .= w
     if l > 1
@@ -66,10 +66,10 @@ end
 
 function dwt!(
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l :: Int = 1;
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 1}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 1}}
     gpux = CuArray(x)
     w = similar(gpux)
     dwt!(w, gpux, b, l; wpt = wpt)
@@ -81,26 +81,26 @@ end
 function idwtk!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F};
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 1}}
+    b::WTOrthogonalBasis{N, G};
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 1}}
     gpu = KernelAbstractions.get_backend(x)
     idwt_1d! = _idwt_1d_kernel!(gpu)
     ls, hs = sbviews(x)
-    idwt_1d!(w, ls, hs, b.φ, b.ψ, ndrange = length(w))
+    idwt_1d!(w, ls, hs, F.(b.φ), F.(b.ψ), ndrange = length(w))
     nothing
 end
 
 function idwtk!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F};
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+    b::WTOrthogonalBasis{N, G};
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
     gpu = KernelAbstractions.get_backend(x)
     idwt_2d! = _idwt_2d_kernel!(gpu)
     ll, lh, hl, hh = sbviews(x)
     idwt_2d!(w,
         ll, lh, hl, hh,
-        b.φφ, b.ψφ, b.φψ, b.ψψ,
+        F.(b.φφ), F.(b.ψφ), F.(b.φψ), F.(b.ψψ),
         ndrange = size(w),
     )
     nothing
@@ -109,10 +109,10 @@ end
 function idwt!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l::Int;
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 1}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 1}}
     if l > 1
         for (sw, sx) in subspaces(w, x, wpt)
             idwt!(sw, sx, b, l - 1; wpt=wpt)
@@ -126,10 +126,10 @@ end
 function idwt!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l::Int;
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
     if l > 1
         for (sw, sx) in subspaces(w, x, wpt)
             idwt!(sw, sx, b, l - 1; wpt=wpt)
@@ -144,8 +144,8 @@ end
 function rowwise_dwtk!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F};
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+    b::WTOrthogonalBasis{N, G};
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
     gpu = KernelAbstractions.get_backend(x)
     Nx, Ny = size(x)
     ls, hs = @wtview (w[:l_], w[:h_])
@@ -157,8 +157,8 @@ end
 function colwise_dwtk!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F};
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+    b::WTOrthogonalBasis{N, G};
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
 
     gpu = KernelAbstractions.get_backend(x)
     Nx, Ny = size(x)
@@ -172,8 +172,8 @@ end
 
 function rowwise_idwtk!(
     w::T, x::T,
-    b::WTOrthogonalBasis{N, F};
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+    b::WTOrthogonalBasis{N, G};
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
 
     gpu = KernelAbstractions.get_backend(w)
     Nx, Ny = size(w)
@@ -187,8 +187,8 @@ end
 
 function colwise_idwtk!(
     w::T, x::T,
-    b::WTOrthogonalBasis{N, F};
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+    b::WTOrthogonalBasis{N, G};
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
 
     gpu = KernelAbstractions.get_backend(w)
     Nx, Ny = size(w)
@@ -203,10 +203,10 @@ end
 function row_dwt!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l::Int;
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
     rowwise_dwtk!(w, x, b)
     x .= w
     if l > 1
@@ -222,10 +222,10 @@ end
 function col_dwt!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l::Int;
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
     colwise_dwtk!(w, x, b)
     x .= w
     if l > 1
@@ -274,10 +274,10 @@ end
 function row_idwt!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l::Int;
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
     if l > 1
         lw, hw = @wtview (w[:l_], w[:h_])
         lx, hx = @wtview (x[:l_], x[:h_])
@@ -294,10 +294,10 @@ end
 function col_idwt!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l::Int;
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
     if l > 1
         lw, hw = @wtview (w[:_l], w[:_h])
         lx, hx = @wtview (x[:_l], x[:_h])
@@ -314,10 +314,10 @@ end
 function idwt!(
     w::T,
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l::Tuple{Int, Int};
     wpt = false
-) :: Nothing where {N, F <: AbstractFloat, T <: AbstractArray{F, 2}}
+) :: Nothing where {N, G, F <: AbstractFloat, T <: AbstractArray{F, 2}}
 
     !wpt && @warn "anisotropic IDWT is bugged without WPT; results may be poor." wpt b l
     u     = min(l...)
@@ -344,10 +344,10 @@ end
 
 function dwt!(
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l = 1;
     wpt = false
-) :: Nothing where {N, M, F <: AbstractFloat, T <: AbstractArray{F, M}}
+) :: Nothing where {N, M, G, F <: AbstractFloat, T <: AbstractArray{F, M}}
     gpux = CuArray(x)
     w = similar(gpux)
     dwt!(w, gpux, b, l; wpt = wpt)
@@ -368,10 +368,10 @@ end
 
 function idwt!(
     x::T,
-    b::WTOrthogonalBasis{N, F},
+    b::WTOrthogonalBasis{N, G},
     l = 1;
     wpt = false
-) :: Nothing where {N, M, F <: AbstractFloat, T <: AbstractArray{F, M}}
+) :: Nothing where {N, M, G, F <: AbstractFloat, T <: AbstractArray{F, M}}
     gpux = CuArray(x)
     w = similar(gpux)
     idwt!(w, gpux, b, l; wpt = wpt)
