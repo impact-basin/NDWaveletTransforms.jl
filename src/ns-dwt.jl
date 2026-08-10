@@ -1,67 +1,3 @@
-# Discrete wavelet transform, 1-D
-@turbofun function _dwt!(
-    x :: AbstractArray{T,1},
-    w :: AbstractArray{T,1},
-    b :: WTOrthogonalBasis,
-    level=1;
-    wpt=false
-) :: AbstractArray{T,1} where T <: Number
-
-    level <= 0 && return x
-
-    _dwt_inner_loop!(x, w, b)
-    # TODO: remove copyto!
-    copyto!(x, w)
-    if level > 1
-        @strided _dwt!(
-            x[1:end>>1],
-            w[1:end>>1],
-            b, level-1;
-            wpt=wpt,
-        )
-        @strided wpt && _dwt!(
-            x[(end>>1)+1:end],
-            w[(end>>1)+1:end],
-            b, level-1;
-            wpt=wpt,
-        )
-    end
-
-    return x
-end
-
-@turbofun function _idwt!(
-    x :: AbstractArray{T, 1},
-    w :: AbstractArray{T, 1},
-    b :: WTOrthogonalBasis,
-    level=1;
-    wpt=false
-) :: AbstractArray{T,1} where T <: Number
-
-    level <= 0 && return x
-    m = length(x) >> 1
-
-    if level > 1
-        _idwt!(
-            x[1:m],
-            w[1:m],
-            b, level - 1, wpt=wpt
-        )
-        wpt && _idwt!(
-            x[m+1:end],
-            w[m+1:end],
-            b, level - 1, wpt=wpt
-        )
-    end
-
-    w .= zero(T)
-
-    _idwt_inner_loop!(x, ls, hs, w, b)
-
-    copyto!(x, w)
-    return x
-end
-
 function nsdwt!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
@@ -93,8 +29,6 @@ function nsdwt!(
         )
     end
 
-    # N.B.: memory copy is good for performance here.
-    # 3x speed improvement just by not using views.
     @floop for i in product([1:size(x)[l] for l=1:N-1]...)
         @strided _dwt!(
             x[i..., :],
@@ -150,73 +84,22 @@ function nsidwt!(
     return x
 end
 
-#     # => dispatch 1-D transforms over all N-1 dimensional indices.
+nsdwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
+    nsdwt!(x, similar(x), b, Tuple(l for _ in 1:N); wpt = wpt)
 
+nsdwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
+    nsdwt!(x, similar(x), b, l; wpt = wpt)
 
-function nsdwt!(
-    x :: AbstractArray{T,N},
-    b :: WTOrthogonalBasis,
-    l :: Int;
-    wpt = false
-) :: AbstractArray{T,N} where {T <: Number, N}
-    w = similar(x)
-    nsdwt!(x, w, b, Tuple(l for _ in 1:N), wpt=wpt)
-end
+nsidwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
+    nsidwt!(x, similar(x), b, Tuple(l for _ in 1:N); wpt = wpt)
 
-function nsidwt!(
-    x :: AbstractArray{T,N},
-    b :: WTOrthogonalBasis,
-    l :: Int;
-    wpt = false
-) :: AbstractArray{T,N} where {T <: Number, N}
-    w = similar(x)
-    nsidwt!(x, w, b, Tuple(l for _ in 1:N), wpt=wpt)
-end
+nsidwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
+    nsidwt!(x, similar(x), b, l; wpt = wpt)
 
-function nsdwt(
-    x :: AbstractArray{T,N},
-    b :: WTOrthogonalBasis,
-    l; wpt = false
-) :: AbstractArray{T,N} where {T <: Number, N}
-    nsdwt!(copy(x), similar(x), b, l, wpt=wpt)
-end
+nsdwt(x, rest...; wpt = false) =
+    nsdwt!(copy(x), rest...; wpt = wpt)
+nsidwt(x, rest...; wpt = false) =
+    nsidwt!(copy(x), rest...; wpt = wpt)
 
-function nsidwt(
-    x :: AbstractArray{T,N},
-    b :: WTOrthogonalBasis,
-    l; wpt = false
-) :: AbstractArray{T,N} where {T <: Number, N}
-    nsidwt!(copy(x), similar(x), b, l, wpt=wpt)
-end
-
-function nswpt!(
-    x :: AbstractArray{T,N},
-    b :: WTOrthogonalBasis,
-    l;
-) :: AbstractArray{T,N} where {T <: Number, N}
-    nsdwt!(x, b, l, wpt=true)
-end
-
-function nsiwpt!(
-    x :: AbstractArray{T,N},
-    b :: WTOrthogonalBasis,
-    l;
-) :: AbstractArray{T,N} where {T <: Number, N}
-    nsidwt!(x, b, l, wpt=true)
-end
-
-function nswpt(
-    x :: AbstractArray{T,N},
-    b :: WTOrthogonalBasis,
-    l;
-) :: AbstractArray{T,N} where {T <: Number, N}
-    nsdwt!(copy(x), similar(x), b, l, wpt=true)
-end
-
-function nsiwpt(
-    x :: AbstractArray{T,N},
-    b :: WTOrthogonalBasis,
-    l;
-) :: AbstractArray{T,N} where {T <: Number, N}
-    nsidwt!(copy(x), similar(x), b, l, wpt=true)
-end
+nswpt!(args...) = nsdwt!(args...; wpt=true)
+nsiwpt!(args...) = nsidwt(args...; wpt=true)

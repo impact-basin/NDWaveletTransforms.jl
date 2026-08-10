@@ -70,16 +70,28 @@ export wpt_bands
 export sbviews
 export subspaces
 
-include("gpu-kernels.jl")
-include("gpu-dispatch.jl")
-export dwt!
-export idwt!
-export dwt
-export idwt
+# include("gpu-kernels.jl")
+# include("gpu-dispatch.jl")
+# export dwt!
+# export idwt!
+# export dwt
+# export idwt
 
 include("innerloops.jl")
 export _dwt_inner_loop!
 export _idwt_inner_loop!
+export _dwt!
+export _idwt!
+
+include("dwt.jl")
+export dwt!
+export dwt
+export idwt!
+export idwt
+export wpt!
+export wpt
+export iwpt!
+export iwpt
 
 include("ns-dwt.jl")
 export nsdwt!
