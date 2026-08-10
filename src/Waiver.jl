@@ -3,8 +3,6 @@ module Waiver
 using StyledStrings
 using StaticArrays
 using Memoization
-# using KernelAbstractions
-# using CUDA
 using Primes
 using LinearAlgebra
 using Match
@@ -19,9 +17,6 @@ using EllipsisNotation
 using Strided
 # using Strided
 using TiffImages
-# memoization... ?
-using CUDA
-using KernelAbstractions
 
 include("algorithms.jl")
 export complement

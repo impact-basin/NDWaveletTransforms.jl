@@ -4,10 +4,8 @@ version = "1.1.2"
 authors = ["Henry Eshbaugh <henry.eshbaugh@physics.ox.ac.uk>"]
 
 [deps]
-CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 EllipsisNotation = "da5c29d0-fa7d-589e-88eb-ea29b0a81949"
 FLoops = "cc61a311-1640-44b5-9fba-1b764f453329"
-KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 MacroTools = "1914dd2f-81c6-5fcd-8719-6d5c9610ff09"
 Match = "7eb4fadd-790c-5f42-8a69-bfa0b872bfbf"
@@ -22,10 +20,8 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TiffImages = "731e570b-9d59-4bfa-96dc-6df516fadf69"
 
 [compat]
-CUDA = "6.2.1"
 EllipsisNotation = "1.10.3"
 FLoops = "0.2.2"
-KernelAbstractions = "0.9.42"
 LinearAlgebra = "1.12.0"
 MacroTools = "0.5.16"
 Match = "2.4.1"
