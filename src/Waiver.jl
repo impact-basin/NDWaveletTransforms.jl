@@ -16,6 +16,7 @@ using MacroTools: prettify, unblock
 using Base.Iterators
 using FLoops
 using EllipsisNotation
+using Strided
 # using Strided
 using TiffImages
 # memoization... ?
@@ -75,6 +76,10 @@ export dwt!
 export idwt!
 export dwt
 export idwt
+
+include("innerloops.jl")
+export _dwt_inner_loop!
+export _idwt_inner_loop!
 
 include("ns-dwt.jl")
 export nsdwt!

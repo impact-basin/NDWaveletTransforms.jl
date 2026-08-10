@@ -1,95 +1,3 @@
-# dwt.jl -- discrete wavelet transforms, including
-# wavelet packet transforms, and their inverses.
-# This implementation is provided for speed and
-# flexibility; we accept views of signals and
-# avoid allocations whenever possible to produce
-# rapid transforms. Further, we provide functionality
-# for differing transform levels across different
-# signal dimensions, critical for analysing data cubes.
-
-# @kernel inbounds=true function _nsdwt1d_kernel!(w, @Const(x), @Const(φ), @Const(ψ))
-#     i = @index(Global)
-#     l = length(x)
-#     n = length(φ)
-#     m = l >> 1
-#     w[i]   = 0
-#     w[i+m] = 0
-#     for k=1:n
-#         idx = clamp(2i + k-1, 1, l)
-#         w[i]   += φ[k] * x[idx]
-#         w[i+m] += ψ[k] * x[idx]
-#     end
-# end
-#
-# # TODO: tag inbounds.
-# @kernel inbounds=true function _insdwt1d_kernel!(w, @Const(x), @Const(φ), @Const(ψ))
-#     i    = @index(Global)
-#     l = length(x) >> 1
-#     n = length(φ)
-#     w[i] = 0
-#     idx  = 1
-#     for k=1:n
-#         idx = max((i - k) ÷ 2, 1)
-#         w[i] += φ[k] * x[idx] + ψ[k] * x[idx + l]
-#     end
-# end
-
-@turbofun function _nsdwt_inner_loop!(
-    x :: AbstractArray{T,1},
-    w :: AbstractArray{T,1},
-    b :: WTOrthogonalBasis{2, F},
-) :: Nothing where {T <: Number, F <: Number}
-
-    ls = @view w[1:end>>1]
-    hs = @view w[(end>>1)+1:end]
-
-    for (outi, sigi) in enumerate(1:2:length(x)-1)
-        @fastmath @views ls[outi] = dot(T.(b.φ), x[sigi:sigi+1])
-        @fastmath @views hs[outi] = dot(T.(b.ψ), x[sigi:sigi+1])
-    end
-end
-
-@turbofun function _nsdwt_inner_loop!(
-    x :: AbstractArray{T,1},
-    w :: AbstractArray{T,1},
-    b :: WTOrthogonalBasis{N, F},
-) :: Nothing where {T <: Number, F <: Number, N}
-
-    ls = @view w[1:end>>1]
-    hs = @view w[(end>>1)+1:end]
-
-    for (outi, sigi) in enumerate(1:2:length(x)-1)
-        @fastmath @views ls[outi] = dot(T.(b.φ), x[mod1.(sigi:sigi+N-1, end)])
-        @fastmath @views hs[outi] = dot(T.(b.ψ), x[mod1.(sigi:sigi+N-1, end)])
-    end
-end
-
-@turbofun function _insdwt_inner_loop!(
-    x :: AbstractArray{T,1},
-    ls :: SubArray{T, 1},
-    hs :: SubArray{T, 1},
-    w :: AbstractArray{T,1},
-    b :: WTOrthogonalBasis{2, F},
-) :: Nothing where {T <: Number, F <: Number}
-    for (i, j) in enumerate(1:2:length(x)-1)
-        @fastmath @views w[j:j+1] .+=
-            ls[i] .* T.(b.φ) .+ hs[i] .* T.(b.ψ)
-    end
-end
-
-@turbofun function _insdwt_inner_loop!(
-    x :: AbstractArray{T,1},
-    ls :: SubArray{T, 1},
-    hs :: SubArray{T, 1},
-    w :: AbstractArray{T,1},
-    b :: WTOrthogonalBasis{N, F},
-) :: Nothing where {T <: Number, N, F <: Number}
-    for (i, j) in enumerate(1:2:length(x)-1)
-        @fastmath @views w[mod1.(j:j+N-1, end)] .+=
-            ls[i] .* T.(b.φ) .+ hs[i] .* T.(b.ψ)
-    end
-end
-
 # Discrete wavelet transform, 1-D
 @turbofun function _dwt!(
     x :: AbstractArray{T,1},
@@ -101,11 +9,22 @@ end
 
     level <= 0 && return x
 
-    _nsdwt_inner_loop!(x, w, b)
+    _dwt_inner_loop!(x, w, b)
+    # TODO: remove copyto!
     copyto!(x, w)
     if level > 1
-        @inbounds _dwt!(@view(x[1:end>>1]), @view(w[1:end>>1]), b, level-1; wpt=wpt)
-        @inbounds wpt && _dwt!(@view(x[(end>>1)+1:end]), @view(w[(end>>1)+1:end]), b, level-1; wpt=wpt)
+        @strided _dwt!(
+            x[1:end>>1],
+            w[1:end>>1],
+            b, level-1;
+            wpt=wpt,
+        )
+        @strided wpt && _dwt!(
+            x[(end>>1)+1:end],
+            w[(end>>1)+1:end],
+            b, level-1;
+            wpt=wpt,
+        )
     end
 
     return x
@@ -121,50 +40,54 @@ end
 
     level <= 0 && return x
     m = length(x) >> 1
-    ls = @view x[1:m]
-    hs = @view x[m+1:end]
 
     if level > 1
         _idwt!(
-            ls,
-            @view(w[1:m]),
+            x[1:m],
+            w[1:m],
             b, level - 1, wpt=wpt
         )
         wpt && _idwt!(
-            hs,
-            @view(w[m+1:end]),
+            x[m+1:end],
+            w[m+1:end],
             b, level - 1, wpt=wpt
         )
-
     end
 
     w .= zero(T)
 
-    _insdwt_inner_loop!(x, ls, hs, w, b)
+    _idwt_inner_loop!(x, ls, hs, w, b)
 
     copyto!(x, w)
     return x
 end
 
 function nsdwt!(
+    x :: AbstractArray{T,1},
+    w :: AbstractArray{T,1},
+    b :: WTOrthogonalBasis,
+    level :: NTuple{1, Int};
+    wpt = false
+) :: AbstractArray{T,1} where {T <: Number}
+
+    _dwt!(x, w, b, level[1], wpt=wpt,)
+    return x
+end
+
+function nsdwt!(
     x :: AbstractArray{T,N},
+    w :: AbstractArray{T,N},
     b :: WTOrthogonalBasis,
     level :: NTuple{N, Int};
     wpt = false
 ) :: AbstractArray{T,N} where {T <: Number, N}
 
-    if N == 1 
-        _dwt!(x, similar(x),
-            b, level[1], wpt=wpt
-        )
-        return x
-    end
-
-    s = size(x)[end]
+    s = size(x, N)
 
     @floop for i=1:s
-        nsdwt!(
-            @view(x[.., i]),
+        @strided nsdwt!(
+            x[.., i],
+            w[.., i],
             b, level[1:end-1],
             wpt = wpt
         )
@@ -173,46 +96,52 @@ function nsdwt!(
     # N.B.: memory copy is good for performance here.
     # 3x speed improvement just by not using views.
     @floop for i in product([1:size(x)[l] for l=1:N-1]...)
-        x[i..., :] .= _dwt!(
+        @strided _dwt!(
             x[i..., :],
-            Vector{T}(undef, s),
+            w[i..., :],
             b, level[end],
             wpt = wpt,
         )
     end
+
     return x
 end
 
 function nsidwt!(
+    x :: AbstractArray{T, 1},
+    w :: AbstractArray{T, 1},
+    b :: WTOrthogonalBasis,
+    level :: NTuple{1, Int};
+    wpt=false
+) :: AbstractArray{T,1} where {T <: Number}
+
+    return _idwt!(x, w, b, level[1], wpt=wpt)
+end
+
+function nsidwt!(
     x :: AbstractArray{T, N},
+    w :: AbstractArray{T, N},
     b :: WTOrthogonalBasis,
     level :: NTuple{N, Int};
     wpt=false
 ) :: AbstractArray{T,N} where {T <: Number, N}
 
-    N == 1 && return _idwt!(x,
-        Vector{T}(undef, length(x)),
-        b, level[1],
-        wpt=wpt
-    )
 
-    s = size(x)[end]
+    s = size(x, N)
 
-    # Don't use views here.
-    # the memory allocation allows for continuous indexing.
-    # This reduces cache misses and improves performance.
     @floop for i in product([1:size(x)[l] for l=1:N-1]...)
-         x[i..., :] .= _idwt!(
+         @strided _idwt!(
             x[i..., :],
-            Vector{T}(undef, s),
+            w[i..., :],
             b, level[end],
             wpt = wpt,
         )
     end
 
     @threads for i=1:s
-        nsidwt!(
-            @view(x[.., i]),
+        @strided nsidwt!(
+            x[.., i],
+            w[.., i],
             b, level[1:end-1],
             wpt = wpt
         )
@@ -230,7 +159,8 @@ function nsdwt!(
     l :: Int;
     wpt = false
 ) :: AbstractArray{T,N} where {T <: Number, N}
-    nsdwt!(x, b, Tuple(l for _ in 1:N), wpt=wpt)
+    w = similar(x)
+    nsdwt!(x, w, b, Tuple(l for _ in 1:N), wpt=wpt)
 end
 
 function nsidwt!(
@@ -239,7 +169,8 @@ function nsidwt!(
     l :: Int;
     wpt = false
 ) :: AbstractArray{T,N} where {T <: Number, N}
-    nsidwt!(x, b, Tuple(l for _ in 1:N), wpt=wpt)
+    w = similar(x)
+    nsidwt!(x, w, b, Tuple(l for _ in 1:N), wpt=wpt)
 end
 
 function nsdwt(
@@ -247,7 +178,7 @@ function nsdwt(
     b :: WTOrthogonalBasis,
     l; wpt = false
 ) :: AbstractArray{T,N} where {T <: Number, N}
-    nsdwt!(copy(x), b, l, wpt=wpt)
+    nsdwt!(copy(x), similar(x), b, l, wpt=wpt)
 end
 
 function nsidwt(
@@ -255,7 +186,7 @@ function nsidwt(
     b :: WTOrthogonalBasis,
     l; wpt = false
 ) :: AbstractArray{T,N} where {T <: Number, N}
-    nsidwt!(copy(x), b, l, wpt=wpt)
+    nsidwt!(copy(x), similar(x), b, l, wpt=wpt)
 end
 
 function nswpt!(
@@ -279,7 +210,7 @@ function nswpt(
     b :: WTOrthogonalBasis,
     l;
 ) :: AbstractArray{T,N} where {T <: Number, N}
-    nsdwt!(copy(x), b, l, wpt=true)
+    nsdwt!(copy(x), similar(x), b, l, wpt=true)
 end
 
 function nsiwpt(
@@ -287,5 +218,5 @@ function nsiwpt(
     b :: WTOrthogonalBasis,
     l;
 ) :: AbstractArray{T,N} where {T <: Number, N}
-    nsidwt!(copy(x), b, l, wpt=true)
+    nsidwt!(copy(x), similar(x), b, l, wpt=true)
 end
