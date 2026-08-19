@@ -1,8 +1,24 @@
 using Test
-using Waiver
+using NDWaveletTransforms
+
+@testset "Correctness" begin
+    @test dwt(ones(4, 4), WT_HAAR, 1) ≈ [
+        2.0 2.0 0.0 0.0;
+        2.0 2.0 0.0 0.0;
+        0.0 0.0 0.0 0.0;
+        0.0 0.0 0.0 0.0
+    ]
+
+    @test dwt(ones(4, 4), WT_HAAR, (1, 2)) ≈ [
+        2.8284271247461894 0.0 0.0 0.0;
+        2.8284271247461894 0.0 0.0 0.0;
+        0.0000000000000000 0.0 0.0 0.0;
+        0.0000000000000000 0.0 0.0 0.0
+    ] 
+end
 
 @testset "Haar traforms" begin
-    x = testimage("moonsurface") .|> Float32
+    x = rand(Float32,128,128)
     y = dwt(x, WT_HAAR, 1)
     idwt!(y, WT_HAAR, 1)
     @test x ≈ y
@@ -15,7 +31,7 @@ using Waiver
 end
 
 @testset "Haar transforms, nonstandard" begin
-    x = testimage("moonsurface") .|> Float32
+    x = rand(Float32,128,128)
     y = nsdwt(x, WT_HAAR, 1)
     nsidwt!(y, WT_HAAR, 1)
     @test x ≈ y
@@ -28,7 +44,7 @@ end
 end
 
 @testset "D4" begin
-    x = testimage("moonsurface") .|> Float32
+    x = rand(Float32,128,128)
     y = dwt(x, WT_D4, 1)
     idwt!(y, WT_D4, 1)
     @test x ≈ y
@@ -41,7 +57,7 @@ end
 end
 
 @testset "D4, nonstandard" begin
-    x = testimage("moonsurface") .|> Float32
+    x = rand(Float32,128,128)
     y = nsdwt(x, WT_D4, 1)
     nsidwt!(y, WT_D4, 1)
     @test x ≈ y
@@ -54,7 +70,7 @@ end
 end
 
 @testset "Float64" begin
-    x = testimage("moonsurface")
+    x = rand(128,128)
     y = dwt(x, WT_HAAR, 1)
     idwt!(y, WT_HAAR, 1)
     @test x ≈ y
@@ -67,7 +83,7 @@ end
 end
 
 @testset "Float64, nonstandard" begin
-    x = testimage("moonsurface")
+    x = rand(128,128)
     y = nsdwt(x, WT_HAAR, 1)
     nsidwt!(y, WT_HAAR, 1)
     @test x ≈ y
@@ -79,8 +95,8 @@ end
     @test x ≈ y
 end
 
-@testset "resolution test 1920" begin
-    x = testimage("resolution_test_1920")
+@testset "Large transform" begin
+    x = rand(256,1024)
     y = dwt(x, WT_HAAR, 1)
     idwt!(y, WT_HAAR, 1)
     @test x ≈ y
@@ -92,8 +108,8 @@ end
     @test x ≈ y
 end
 
-@testset "resolution test 1920, nonstandard" begin
-    x = testimage("resolution_test_1920")
+@testset "Large transform, nonstandard" begin
+    x = rand(256,1024)
     y = nsdwt(x, WT_HAAR, 1)
     nsidwt!(y, WT_HAAR, 1)
     @test x ≈ y

@@ -2,9 +2,6 @@
 # abstract signal types
 # ---------------------
 abstract type WTBasis end
-const WT_LEVELS = Union{Int, Tuple{Int, Int}}
-const SIGNAL_1D = Union{Vector{<:Number}, SubArray{<:Number,1}}
-const SIGNAL_2D = Union{Matrix{<:Number}, SubArray{<:Number,2}}
 
 """
     WTOrthogonalBasis: Basis for an orthogonal wavelet transform.
@@ -19,10 +16,10 @@ struct WTOrthogonalBasis{N, T<:Number} <: WTBasis
     # fields
     φ  :: SVector{N, T} # scaling filter
     ψ  :: SVector{N, T} # wavelet filter
-    φφ :: SMatrix{N, N, T} # scaling filter
-    φψ :: SMatrix{N, N, T} # scaling filter
-    ψφ :: SMatrix{N, N, T} # wavelet filter
-    ψψ :: SMatrix{N, N, T} # wavelet filter
+    # φφ :: SMatrix{N, N, T} # scaling filter
+    # φψ :: SMatrix{N, N, T} # scaling filter
+    # ψφ :: SMatrix{N, N, T} # wavelet filter
+    # ψψ :: SMatrix{N, N, T} # wavelet filter
 
     # convenience constructor 1: specified scaling/wavelet filters.
     """
@@ -42,10 +39,10 @@ struct WTOrthogonalBasis{N, T<:Number} <: WTBasis
         new{N, T}(
             φ / norm(φ),
             ψ / norm(ψ),
-            φ * φ' / norm(φ * φ'),
-            φ * ψ' / norm(φ * ψ'),
-            ψ * φ' / norm(ψ * φ'),
-            ψ * ψ' / norm(ψ * ψ'),
+            # φ * φ' / norm(φ * φ'),
+            # φ * ψ' / norm(φ * ψ'),
+            # ψ * φ' / norm(ψ * φ'),
+            # ψ * ψ' / norm(ψ * ψ'),
         )
     end
 
@@ -62,7 +59,7 @@ struct WTOrthogonalBasis{N, T<:Number} <: WTBasis
 
         
         # sanity check
-        (isnothing(φ) && isnothing(ψ)) && error("fuck you")
+        (isnothing(φ) && isnothing(ψ)) && error("WTOrthogonalBasis: no basis specified!")
         ψ = isnothing(ψ) ? complement(φ) : ψ
         φ = isnothing(φ) ? complement(ψ) : φ
 
@@ -126,97 +123,7 @@ const WT_SYM10 = WTOrthogonalBasis(φ = SA{Float64}[-0.0006495898960000,0.000080
 const WT_BATTLE2 = WTOrthogonalBasis(φ = SA{Float64}[-0.0000867523000000,-0.0001586010000000,0.0003617810000000,0.0006529220000000,-0.0015570100000000,-0.0027458800000000,0.0070644200000000,0.0120030000000000,-0.0367309000000000,-0.0488618000000000,0.2809310000000000,0.5781630000000000,0.2809310000000000,-0.0488618000000000,-0.0367309000000000,0.0120030000000000,0.0070644200000000,-0.0027458800000000,-0.0015570100000000,0.0006529220000000,0.0003617810000000,-0.0001586010000000,-0.0000867523000000])
 const WT_BATTLE4 = WTOrthogonalBasis(φ = SA{Float64}[0.0001033070000000,-0.0001642640000000,-0.0002018180000000,0.0003267490000000,0.0003959460000000,-0.0006556200000000,-0.0007804680000000,0.0013308600000000,0.0015462400000000,-0.0027452900000000,-0.0030786300000000,0.0057993200000000,0.0061414300000000,-0.0127154000000000,-0.0121455000000000,0.0297468000000000,0.0226846000000000,-0.0778079000000000,-0.0354980000000000,0.3068300000000000,0.5417360000000000,0.3068300000000000,-0.0354980000000000,-0.0778079000000000,0.0226846000000000,0.0297468000000000,-0.0121455000000000,-0.0127154000000000,0.0061414300000000,0.0057993200000000,-0.0030786300000000,-0.0027452900000000,0.0015462400000000,0.0013308600000000,-0.0007804680000000,-0.0006556200000000,0.0003959460000000,0.0003267490000000,-0.0002018180000000,-0.0001642640000000,0.0001033070000000])
 const WT_BATTLE6 = WTOrthogonalBasis(φ = SA{Float64}[0.0001011130000000,0.0001107090000000,-0.0001591680000000,-0.0001726850000000,0.0002514190000000,0.0002698420000000,-0.0003987590000000,-0.0004224850000000,0.0006355630000000,0.0006628360000000,-0.0010191200000000,-0.0010420700000000,0.0016465900000000,0.0016413200000000,-0.0026864600000000,-0.0025881600000000,0.0044400200000000,0.0040788200000000,-0.0074684800000000,-0.0063988600000000,0.0128754000000000,0.0099063500000000,-0.0229951000000000,-0.0148537000000000,0.0433544000000000,0.0208414000000000,-0.0914068000000000,-0.0261771000000000,0.3128690000000000,0.5283740000000000,0.3128690000000000,-0.0261771000000000,-0.0914068000000000,0.0208414000000000,0.0433544000000000,-0.0148537000000000,-0.0229951000000000,0.0099063500000000,0.0128754000000000,-0.0063988600000000,-0.0074684800000000,0.0040788200000000,0.0044400200000000,-0.0025881600000000,-0.0026864600000000,0.0016413200000000,0.0016465900000000,-0.0010420700000000,-0.0010191200000000,0.0006628360000000,0.0006355630000000,-0.0004224850000000,-0.0003987590000000,0.0002698420000000,0.0002514190000000,-0.0001726850000000,-0.0001591680000000,0.0001107090000000,0.0001011130000000])
-const WT_BEYL = WTOrthogonalBasis(φ = SA{Float64}[0.0993057653740000,0.4242153608130000,0.6998252140570000,0.4497182511490000,-0.1109275983480000,-0.2644972314460000,0.0269003088040000,0.1555387318770000,-0.0175207462670000,-0.0885436306230000,0.0196798660440000,0.0429163872740000,-0.0174604086960000,-0.0143658079690000,0.0100404118450000,0.0014842347820000,-0.0027360316260000,0.0006404853290000])
-const WT_VAID = WTOrthogonalBasis(φ = SA{Float64}[-0.0000629061180000,0.0003436319050000,-0.0004539566200000,-0.0009448971360000,0.0028438345470000,0.0007081375040000,-0.0088391034090000,0.0031538470560000,0.0196872150100000,-0.0148534480050000,-0.0354703986070000,0.0387426192930000,0.0558925236910000,-0.0777097509020000,-0.0839288843660000,0.1319716614170000,0.1350842271290000,-0.1944504717660000,-0.2634948024880000,0.2016121617750000,0.6356010598720000,0.5727977932110000,0.2501841295050000,0.0457993341110000])
 
-# """
-#     struct WTBandIndex
-#
-#     Represents indices used to slice into a wavelet transform
-#     to isolate particular subbands. Generally behind-the-scenes;
-#     it's recommended to use wtview() instead.
-# """
-# struct WTBandIndex
-#     dims :: Int
-#     xs   :: Tuple{Int, Int}
-#     ys   :: Tuple{Int, Int}
-#
-#     WTBandIndex(x::Tuple{Int})     = new(1, (1, x[1]), (0, 0))
-#     WTBandIndex(x::Tuple{Int,Int}) = new(2, (1, x[1]), (1, x[2]))
-#
-#     function WTBandIndex(x::T) where T <: AbstractArray
-#         sz = size(x)
-#         return @match ndims(x) begin
-#             1 => new(1, (1, sz[1]), (0,0))
-#             2 => new(2, (1, sz[1]), (1, sz[2]))
-#             _ => error("ndims($(x)) > 2 is currently unsupported.")
-#         end
-#     end
-#
-#     function WTBandIndex(w::WTBandIndex, s::Symbol)
-#
-#         # helper functions for l/h subband index tuple generation
-#         l(x1, x2) = (x1, (x1 + x2) >> 1)
-#         h(x1, x2) = (((x1 + x2) >> 1) + 1, x2)
-#
-#         return @match s begin
-#
-#             # 1D cases
-#             :l where (w.dims == 1) => new(1, l(w.xs[1], w.xs[2]), (0, 0))
-#             :h where (w.dims == 1) => new(1, h(w.xs[1], w.xs[2]), (0, 0))
-#
-#             # 2D cases: subband across 1 dimension only
-#             :l_ where (w.dims == 2) => new(2, l(w.xs[1], w.xs[2]),  (w.ys[1], w.ys[2]))
-#             :h_ where (w.dims == 2) => new(2, h(w.xs[1], w.xs[2]),  (w.ys[1], w.ys[2]))
-#             :_l where (w.dims == 2) => new(2,  (w.xs[1], w.xs[2]), l(w.ys[1], w.ys[2]))
-#             :_h where (w.dims == 2) => new(2,  (w.xs[1], w.xs[2]), h(w.ys[1], w.ys[2]))
-#
-#             # 2D cases: both subbands
-#             :ll where (w.dims == 2) => new(2, l(w.xs[1], w.xs[2]), l(w.ys[1], w.ys[2]))
-#             :lh where (w.dims == 2) => new(2, l(w.xs[1], w.xs[2]), h(w.ys[1], w.ys[2]))
-#             :hl where (w.dims == 2) => new(2, h(w.xs[1], w.xs[2]), l(w.ys[1], w.ys[2]))
-#             :hh where (w.dims == 2) => new(2, h(w.xs[1], w.xs[2]), h(w.ys[1], w.ys[2]))
-#
-#             # 2D -> 1D cases
-#             :x  where (w.dims == 2) => new(1,  (w.xs[1], w.xs[2]), (0, 0))
-#             :y  where (w.dims == 2) => new(1,  (w.ys[1], w.ys[2]), (0, 0))
-#
-#             # make sure that the caller hasn't done a stupid
-#             _ => error("Unknown subband $(s).\n$(@show w)")
-#         end
-#     end
-# end
-#
-# function Base.getproperty(w::WTBandIndex, s::Symbol)
-#     return @match s begin
-#         :dims => getfield(w,:dims)
-#         :xs   => getfield(w,:xs)
-#         :ys   => getfield(w,:ys)
-#         :x    => getfield(w,:xs)[1]:getfield(w,:xs)[2]
-#         :y    => getfield(w,:ys)[1]:getfield(w,:ys)[2]
-#     end
-# end
-#
-# function Base.show(io::IO, w::WTBandIndex)
-#     print(io, styled"{bold,blue:$(w.dims)}-dimensional {bold,blue:Wavelet Subband}:\n")
-#     print(io, styled"    -> {bold,blue:X}: [$(w.xs[1]) : $(w.xs[2])]")
-#     if w.dims > 1
-#         print(io, styled"\n    -> {bold,blue:Y}: [$(w.ys[1]) : $(w.ys[2])]")
-#     end
-# end
-#
-# function Base.getindex(w::WTBandIndex)
-#     (w.dims == 1 ? (w.xs[1]:w.xs[2])
-#                  : (w.xs[1]:w.xs[2], w.ys[1]:w.ys[2]))
-# end
-#
-# function (w::WTBandIndex)(bands::Vector{Symbol})
-#     for band in bands
-#         w = WTBandIndex(w, band)
-#     end
-#     return w
-# end
-#
-# function (w::WTBandIndex)(bands::Vararg{Symbol, N}) where N
-#     w(collect(bands))
-# end
+const WT_BEYL = WTOrthogonalBasis(φ = SA{Float64}[0.0993057653740000,0.4242153608130000,0.6998252140570000,0.4497182511490000,-0.1109275983480000,-0.2644972314460000,0.0269003088040000,0.1555387318770000,-0.0175207462670000,-0.0885436306230000,0.0196798660440000,0.0429163872740000,-0.0174604086960000,-0.0143658079690000,0.0100404118450000,0.0014842347820000,-0.0027360316260000,0.0006404853290000])
+
+const WT_VAID = WTOrthogonalBasis(φ = SA{Float64}[-0.0000629061180000,0.0003436319050000,-0.0004539566200000,-0.0009448971360000,0.0028438345470000,0.0007081375040000,-0.0088391034090000,0.0031538470560000,0.0196872150100000,-0.0148534480050000,-0.0354703986070000,0.0387426192930000,0.0558925236910000,-0.0777097509020000,-0.0839288843660000,0.1319716614170000,0.1350842271290000,-0.1944504717660000,-0.2634948024880000,0.2016121617750000,0.6356010598720000,0.5727977932110000,0.2501841295050000,0.0457993341110000])

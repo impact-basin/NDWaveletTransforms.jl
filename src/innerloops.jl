@@ -3,7 +3,7 @@
 # -----------------
 
 # 2-tap transform: no mod1 branching.
-@turbofun function _dwt_inner_loop!(
+@fastfun function _dwt_inner_loop!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
     b :: WTOrthogonalBasis{2, F},
@@ -19,7 +19,7 @@
 end
 
 # N-tap transform: mod1 branching.
-@turbofun function _dwt_inner_loop!(
+@fastfun function _dwt_inner_loop!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
     b :: WTOrthogonalBasis{N, F},
@@ -39,7 +39,7 @@ end
 # -----------------
 
 # 2-tap transform: no mod1 branching.
-@turbofun function _idwt_inner_loop!(
+@fastfun function _idwt_inner_loop!(
     l :: AbstractArray{T, 1},
     h :: AbstractArray{T, 1},
     w :: AbstractArray{T,1},
@@ -51,9 +51,7 @@ end
     end
 end
 
-# N-tap transform: mod1 branching.
-# TODO: faster mod1!
-@turbofun function _idwt_inner_loop!(
+@fastfun function _idwt_inner_loop!(
     l :: AbstractArray{T, 1},
     h :: AbstractArray{T, 1},
     w :: AbstractArray{T, 1},
@@ -66,7 +64,7 @@ end
 end
 
 # Discrete wavelet transform, 1-D
-@turbofun function _dwt!(
+@fastfun function _dwt!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
     b :: WTOrthogonalBasis,
@@ -77,7 +75,6 @@ end
     level <= 0 && return x
 
     _dwt_inner_loop!(x, w, b)
-    # TODO: remove copyto!
     copyto!(x, w)
     if level > 1
         @strided _dwt!(
@@ -97,7 +94,7 @@ end
     return x
 end
 
-@turbofun function _idwt!(
+@fastfun function _idwt!(
     x :: AbstractArray{T, 1},
     w :: AbstractArray{T, 1},
     b :: WTOrthogonalBasis,

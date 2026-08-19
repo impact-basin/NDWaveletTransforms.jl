@@ -1,8 +1,4 @@
-# TODO:
-# -> mutate the transform level in-place.
-# -> branch more intelligently into the 1-D case.
-
-function dwt!(
+@fastfun function dwt!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
     b :: WTOrthogonalBasis,
@@ -14,7 +10,7 @@ function dwt!(
     return x
 end
 
-function dwt!(
+@fastfun function dwt!(
     x :: AbstractArray{T,N},
     w :: AbstractArray{T,N},
     b :: WTOrthogonalBasis,
@@ -24,32 +20,30 @@ function dwt!(
 
     s = size(x, N)
 
-    # TODO: turn this into eachslice invoke
-    for j=1:maximum(level)
-        @floop for i=1:s
-            @strided dwt!(
-                x[.., i],
-                w[.., i], b,
-                clamp!.(l[1:end-1], 0, 1),
-                wpt = wpt
-            )
-        end
+    @floop for (xs, ws) in zip(
+        eachslice(x, dims = N),
+        eachslice(w, dims = N),
+    )
+        dwt!(xs, ws, b, [ll >= 1 for ll in l[1:N-1]], wpt = wpt)
+    end
 
-        @floop for i in product([1:size(x)[l] for l=1:N-1]...)
-            l[end] >= 1 && @strided _dwt!(
-                x[i..., :],
-                w[i..., :],
-                b, wpt = wpt,
-            )
-        end
-        
-        l .-= 1
+    l[end] >= 1 && @floop for (xs, ws) in zip(
+        eachslice(x, dims = ntuple(i -> i, N - 1)),
+        eachslice(w, dims = ntuple(i -> i, N - 1)),
+    )
+        _dwt!(xs, ws, b, 1, wpt = wpt)
+    end
+
+    l .-= 1
+    any(l .> 0) && @floop for subspace in subspaces(w, x, wpt)
+        wss, xss = subspace
+        dwt!(xss, wss, b, l, wpt = wpt)
     end
 
     return x
 end
 
-function idwt!(
+@fastfun function idwt!(
     x :: AbstractArray{T, 1},
     w :: AbstractArray{T, 1},
     b :: WTOrthogonalBasis,
@@ -60,7 +54,7 @@ function idwt!(
     return _idwt!(x, w, b, l[1], wpt=wpt)
 end
 
-function idwt!(
+@fastfun function idwt!(
     x :: AbstractArray{T, N},
     w :: AbstractArray{T, N},
     b :: WTOrthogonalBasis,
@@ -69,48 +63,48 @@ function idwt!(
 ) :: AbstractArray{T,N} where {T <: Number, N}
 
 
-    s = size(x, N)
+    any(l .> 1) && @floop for subspace in subspaces(w, x, wpt)
+        wss, xss = subspace
+        idwt!(xss, wss, b, l .- 1, wpt = wpt)
+    end
 
-    for j=1:maximum(level)
-        @floop for i in product([1:size(x)[l] for l=1:N-1]...)
-            l[end] >= 1 && @strided _idwt!(
-                x[i..., :],
-                w[i..., :],
-                b, wpt = wpt,
-            )
-        end
+    l .= l .>= 1
 
-        @threads for i=1:s
-            @strided idwt!(
-                x[.., i],
-                w[.., i], b,
-                clamp!.(l[1:end-1], 0, 1),
-                wpt = wpt
-            )
-        end
+    l[end] >= 1 && @floop for (xs, ws) in zip(
+        eachslice(x, dims = ntuple(i -> i, N - 1)),
+        eachslice(w, dims = ntuple(i -> i, N - 1)),
+    )
+        _idwt!(xs, ws, b, 1, wpt = wpt)
+    end
 
-        l .-= 1
+    @floop for (xs, ws) in zip(
+        eachslice(x, dims = N),
+        eachslice(w, dims = N),
+    )
+        idwt!(xs, ws, b, l[1:N-1], wpt = wpt)
     end
 
     return x
 end
 
-dwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
-    dwt!(x, similar(x), b, repeat([l] for _ in 1:N); wpt = wpt)
+@fastfun dwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
+    dwt!(StridedView(x), StridedView(similar(x)), b, repeat([l], N); wpt = wpt)
 
-dwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
-    dwt!(x, similar(x), b, l |> collect; wpt = wpt)
+@fastfun dwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
+    dwt!(StridedView(x), StridedView(similar(x)), b, l |> collect; wpt = wpt)
 
-idwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
-    idwt!(x, similar(x), b, repeat([l] for _ in 1:N); wpt = wpt)
+@fastfun idwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
+    idwt!(StridedView(x), StridedView(similar(x)), b, repeat([l], N); wpt = wpt)
 
-idwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
-    idwt!(x, similar(x), b, l; wpt = wpt)
+@fastfun idwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
+    idwt!(StridedView(x), StridedView(similar(x)), b, l |> collect; wpt = wpt)
 
-dwt(x, rest...; wpt = false) =
-    dwt!(copy(x), rest...; wpt = wpt)
-idwt(x, rest...; wpt = false) =
-    idwt!(copy(x), rest...; wpt = wpt)
+@fastfun dwt(x::T, rest...; wpt = false) where T =
+    dwt!(copy(x), rest...; wpt = wpt) |> T
+@fastfun idwt(x::T, rest...; wpt = false) where T =
+    idwt!(copy(x), rest...; wpt = wpt) |> T
 
-wpt!(args...) = dwt!(args...; wpt=true)
-iwpt!(args...) = idwt(args...; wpt=true)
+@fastfun wpt!(args...) = dwt!(args...; wpt=true)
+@fastfun iwpt!(args...) = idwt!(args...; wpt=true)
+@fastfun wpt(args...) = dwt(args...; wpt=true)
+@fastfun iwpt(args...) = idwt(args...; wpt=true)

@@ -1,4 +1,4 @@
-function nsdwt!(
+@fastfun function nsdwt!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
     b :: WTOrthogonalBasis,
@@ -10,7 +10,7 @@ function nsdwt!(
     return x
 end
 
-function nsdwt!(
+@fastfun function nsdwt!(
     x :: AbstractArray{T,N},
     w :: AbstractArray{T,N},
     b :: WTOrthogonalBasis,
@@ -41,7 +41,7 @@ function nsdwt!(
     return x
 end
 
-function nsidwt!(
+@fastfun function nsidwt!(
     x :: AbstractArray{T, 1},
     w :: AbstractArray{T, 1},
     b :: WTOrthogonalBasis,
@@ -52,7 +52,7 @@ function nsidwt!(
     return _idwt!(x, w, b, level[1], wpt=wpt)
 end
 
-function nsidwt!(
+@fastfun function nsidwt!(
     x :: AbstractArray{T, N},
     w :: AbstractArray{T, N},
     b :: WTOrthogonalBasis,
@@ -84,22 +84,24 @@ function nsidwt!(
     return x
 end
 
-nsdwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
+@fastfun nsdwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
     nsdwt!(x, similar(x), b, Tuple(l for _ in 1:N); wpt = wpt)
 
-nsdwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
+@fastfun nsdwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
     nsdwt!(x, similar(x), b, l; wpt = wpt)
 
-nsidwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
+@fastfun nsidwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
     nsidwt!(x, similar(x), b, Tuple(l for _ in 1:N); wpt = wpt)
 
-nsidwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
+@fastfun nsidwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
     nsidwt!(x, similar(x), b, l; wpt = wpt)
 
-nsdwt(x, rest...; wpt = false) =
+@fastfun nsdwt(x, rest...; wpt = false) =
     nsdwt!(copy(x), rest...; wpt = wpt)
-nsidwt(x, rest...; wpt = false) =
+@fastfun nsidwt(x, rest...; wpt = false) =
     nsidwt!(copy(x), rest...; wpt = wpt)
 
-nswpt!(args...) = nsdwt!(args...; wpt=true)
-nsiwpt!(args...) = nsidwt(args...; wpt=true)
+@fastfun nswpt!(args...) = nsdwt!(args...; wpt=true)
+@fastfun nsiwpt!(args...) = nsidwt!(args...; wpt=true)
+@fastfun nswpt(args...) = nsdwt(args...; wpt=true)
+@fastfun nsiwpt(args...) = nsidwt(args...; wpt=true)
