@@ -46,11 +46,9 @@ export WT_BEYL
 export WT_VAID
 
 include("subbands.jl")
-export wt_index_1d
-export wt_index
-export @wtview
-export sbviews
-export subspaces
+export rtree_views
+export rtree_view
+export @rtview
 
 include("innerloops.jl")
 include("dwt.jl")

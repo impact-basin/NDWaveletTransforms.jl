@@ -6,97 +6,42 @@
 ##
 ## To set all scaling coefficients to zero.
 
-function wt_index_1d(r::UnitRange, i::Char)
-    @match i begin
-        'l' || 'L' => r.start:(r.start+r.stop-1)>>1
-        'h' || 'H' => (r.start+r.stop+1)>>1:r.stop
-        _   => r
+@generated function rtree_views(x::T) :: Tuple{SubArray{E, N, T}} where {E, N, T <: AbstractArray{E, N}}  
+    inds = [((i & (1<<(N-j))) == 0 ?
+                :(1:size(x, $j)>>1) :
+                :(size(x, $j)>>1 + 1:size(x, $j))
+                for j in 1:N) for i=0:2^N - 1]
+    exprs = [:(view(x, $(inds[i]...))) for i=1:2^N]
+    return quote
+        ($(exprs...),)
     end
 end
 
-function wt_index_1d(r::UnitRange, i::String)
-    length(i) == 0 && return r
-    @match i[1] begin
-        'l' || 'L' =>
-            wt_index_1d(r.start:(r.start+r.stop-1)>>1, i[2:end])
-        'h' || 'H' =>
-            wt_index_1d((r.start+r.stop+1)>>1:r.stop,  i[2:end])
-        _   => r
+Base.@constprop :aggressive rtree_view(x, i::Int) = rtree_views(x)[i]
+
+Base.@constprop :aggressive lh_str_to_num(s :: String) =
+    parse(Int, 
+        replace(s, r"(L|l)" => s"0", r"(H|h)" => s"1");
+        base=2
+    ) + 1
+
+Base.@constprop :aggressive rtree_view(x, s::String) =
+    rtree_view(x, lh_str_to_num(s))
+
+Base.@constprop :aggressive rtree_view(x, s::Symbol) =
+    rtree_view(x, String(s))
+
+macro rtview(expr)
+    postwalk(expr) do e
+        @capture(e, x_[inds__]) || return e
+        e = :(rtree_view($(esc(x)), $(inds[1])))
+        for ind in inds[2:end]
+            e = :(rtree_view($e, $ind))
+        end
+        return e
     end
 end
 
-function wt_index(sz::NTuple{N,UnitRange}, i::String) where N
-    length(i) % N == 0 || @error "wt_index(): Bad index!" sz i
-    Tuple(wt_index_1d(sz[k], i[k:N:end]) for k = 1:N)
-end
-
-wt_index(sz::NTuple{N,UnitRange}, i::Symbol) where N =
-    wt_index(sz, string(i))
-
-wt_index(sz::NTuple{N,UnitRange}, i::String...) where N =
-    wt_index(sz, prod(i))
-
-wt_index(sz::NTuple{N,UnitRange}, i::Symbol...) where N =
-    wt_index(sz, prod(string.(i)))
-
-wt_index(v::AbstractArray{T,N}, i::Union{String, Symbol}) where {T <: Number, N} =
-    view(v, wt_index(Tuple(1:s for s in size(v)), i)...)
-
-wt_index(v::AbstractArray{T,N}, i::Union{String, Symbol}...) where {T <: Number, N} =
-        wt_index(v, prod(string(x) for x in i))
-
-wt_index(i::Union{String, Symbol}...) =
-    (v::AbstractArray{T,N} where {T<:Number, N}) -> 
-        wt_index(v, prod(string(x) for x in i))
-
-macro wtview(expr)
-    # descend the AST
-    return postwalk(expr) do x
-
-        # look for expressions indexing into arrays
-        @capture(x, arr_Symbol[syms__]) || return x
-
-        # check that we have raw quotenodes
-        all(x -> x isa QuoteNode, syms) || return x
-
-        # check that those quotenodes resolve to symbols
-        syms = prod(map(x -> string(x.value), syms))
-
-        # invoke wtview with the list of symbols
-        return :(wt_index($arr, $syms))
-    end |> esc
-end
-
-sbviews(x :: T) where {N <: Number, T <: AbstractArray{N,1}} = (
-    wt_index(x, :l),
-    wt_index(x, :h),
-)
-
-sbviews(x :: T) where {N <: Number, T <: AbstractArray{N,2}} = (
-    wt_index(x, :ll), wt_index(x, :lh),
-    wt_index(x, :hl), wt_index(x, :hh),
-)
-
-subspaces(n::T) where T <: Number =
-    n > 1 ? ['l' .* subspaces(n-1); 'h' .* subspaces(n-1)] :
-    n > 0 ? ["l", "h"] :
-            ["",  "" ]
-
-subspaces(n::T, m::U) where {T<:Number, U<:Number} =
-    (n <= 0 || m <= 0) ? [""] : [prod(x) for x in Iterators.product([subspaces(n) for i=1:m]...)][:]
-
-function subspaces(
-    w::A,
-    x::A,
-    packet = false
-) :: Vector{Tuple} where {T <: AbstractFloat, N, A <: AbstractArray{T, N}}
-    packet || return [(
-        wt_index(w, repeat("l", N)),
-        wt_index(x, repeat("l", N)),
-    )]
-    return [(
-        wt_index(w, str),
-        wt_index(x, str),
-    ) for str in subspaces(N)]
-end
-
+subspaces(w, x, wpt) = wpt ?
+    (rtree_views(w),    rtree_views(x)) :
+    ((rtree_view(w, 1), rtree_view(x, 1)),)
