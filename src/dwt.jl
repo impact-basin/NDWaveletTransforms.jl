@@ -1,3 +1,19 @@
+@generated function zipslices_1d(x::T, w::T) where {E, N, T <: AbstractArray{E,N}}
+    quote zip(
+        eachslice(x, dims = $N),
+        eachslice(w, dims = $N),
+    ) end
+end
+
+@generated function zipslices_nd(x::T, w::T) where {E, N, T <: AbstractArray{E,N}}
+    dims = ntuple(i -> i, N-1)
+    quote zip(
+        eachslice(x, dims = $dims),
+        eachslice(w, dims = $dims),
+    ) end
+end
+
+
 @fastfun function dwt!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
@@ -20,17 +36,11 @@ end
 
     s = size(x, N)
 
-    @floop for (xs, ws) in zip(
-        eachslice(x, dims = N),
-        eachslice(w, dims = N),
-    )
+    @floop for (xs, ws) in zipslices_1d(x, w)
         dwt!(xs, ws, b, [ll >= 1 for ll in l[1:N-1]], wpt = wpt)
     end
 
-    l[end] >= 1 && @floop for (xs, ws) in zip(
-        eachslice(x, dims = ntuple(i -> i, N - 1)),
-        eachslice(w, dims = ntuple(i -> i, N - 1)),
-    )
+    l[end] >= 1 && @floop for (xs, ws) in zipslices_nd(x, w)
         _dwt!(xs, ws, b, 1, wpt = wpt)
     end
 
@@ -70,17 +80,11 @@ end
 
     l .= l .>= 1
 
-    l[end] >= 1 && @floop for (xs, ws) in zip(
-        eachslice(x, dims = ntuple(i -> i, N - 1)),
-        eachslice(w, dims = ntuple(i -> i, N - 1)),
-    )
+    l[end] >= 1 && @floop for (xs, ws) in zipslices_nd(x,w)
         _idwt!(xs, ws, b, 1, wpt = wpt)
     end
 
-    @floop for (xs, ws) in zip(
-        eachslice(x, dims = N),
-        eachslice(w, dims = N),
-    )
+    @floop for (xs, ws) in zipslices_1d(x, w)
         idwt!(xs, ws, b, l[1:N-1], wpt = wpt)
     end
 
