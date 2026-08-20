@@ -42,6 +42,12 @@ macro rtview(expr)
     end
 end
 
+macro wtview(expr)
+    return quote
+        @rtview $expr
+    end
+end
+
 subspaces(w, x, wpt) = wpt ?
     (rtree_views(w),    rtree_views(x)) :
     ((rtree_view(w, 1), rtree_view(x, 1)),)
