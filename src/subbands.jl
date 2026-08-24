@@ -1,10 +1,10 @@
-## subbands.jl -- helpers for working with subbands.
-## For the most part, you will want @wtview and friends.
-## This will allow you to write e.g.
-##
-## @wtview a[:ll] .= 0
-##
-## To set all scaling coefficients to zero.
+# subbands.jl -- helpers for working with subbands.
+# For the most part, you will want @wtview and friends.
+# This will allow you to write e.g.
+#
+# @wtview a[:ll] .= 0
+#
+# to set all scaling coefficients to zero.
 
 @generated function rtree_views(x::T) :: Tuple{SubArray{E, N, T}} where {E, N, T <: AbstractArray{E, N}}  
     inds = [((i & (1<<(N-j))) == 0 ?
@@ -49,5 +49,5 @@ macro wtview(expr)
 end
 
 subspaces(w, x, wpt) = wpt ?
-    (rtree_views(w),    rtree_views(x)) :
+    zip(rtree_views(w), rtree_views(x)) :
     ((rtree_view(w, 1), rtree_view(x, 1)),)

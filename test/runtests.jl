@@ -1,4 +1,5 @@
 using Test
+using Random
 using NDWaveletTransforms
 
 @testset "Correctness" begin
@@ -121,6 +122,104 @@ end
     @test x ≈ y
 end
 
+@testset "Wavelet packet round trips, 1-D" begin
+    for T in (Float32, Float64)
+        for b in (WT_HAAR, WT_D4, WT_D8)
+            for n in (4, 8, 16)
+                x = rand(T, n)
+                for l in (1, 2, 3)
+                    y = wpt(x, b, l)
+                    iwpt!(y, b, l)
+                    @test x ≈ y
+                end
+            end
+        end
+    end
+end
+
+@testset "Wavelet packet round trips, 2-D" begin
+    for T in (Float32, Float64)
+        for b in (WT_HAAR, WT_D4)
+            for (m, n) in ((8, 8), (16, 32))
+                x = rand(T, m, n)
+                for l in ((1, 1), (2, 2), (2, 3), (3, 2))
+                    y = wpt(x, b, l)
+                    iwpt!(y, b, l)
+                    @test x ≈ y
+                end
+            end
+        end
+    end
+end
+
+@testset "Wavelet packet round trips, 3-D" begin
+    for T in (Float32, Float64)
+        x = rand(T, 8, 8, 8)
+        for l in ((1, 1, 1), (2, 1, 2), (2, 2, 2), (3, 2, 1))
+            y = wpt(x, WT_HAAR, l)
+            iwpt!(y, WT_HAAR, l)
+            @test x ≈ y
+        end
+    end
+end
+
+@testset "3-D transforms" begin
+    for T in (Float32, Float64)
+        x = rand(T, 8, 8, 8)
+        for b in (WT_HAAR, WT_D4)
+            for l in ((1, 1, 1), (2, 1, 2), (2, 2, 2), (3, 2, 1))
+                y = dwt(x, b, l)
+                idwt!(y, b, l)
+                @test x ≈ y
+                y = nsdwt(x, b, l)
+                nsidwt!(y, b, l)
+                @test x ≈ y
+            end
+        end
+    end
+end
+
+@testset "Nonstandard wavelet packets" begin
+    for T in (Float32, Float64)
+        for (m, n) in ((8, 8), (16, 32))
+            x = rand(T, m, n)
+            for l in ((1, 1), (2, 2), (2, 3))
+                y = nswpt(x, WT_D4, l)
+                nsiwpt!(y, WT_D4, l)
+                @test x ≈ y
+            end
+        end
+    end
+end
+
+@testset "Level vectors are not mutated" begin
+    x = rand(8, 8)
+    w = similar(x)
+    for f in (dwt!, idwt!)
+        l = [2, 3]
+        lcopy = copy(l)
+        f(copy(x), w, WT_D4, l)
+        @test l == lcopy
+    end
+end
+
+@testset "Known coefficient values (Haar)" begin
+    sq2 = sqrt(2.0)
+    @test wpt(ones(4), WT_HAAR, 1) ≈ [sq2, sq2, 0.0, 0.0]
+    @test dwt(ones(8), WT_HAAR, 2) ≈ [2.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    @test wpt(ones(8), WT_HAAR, 2) ≈ [2.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    @test dwt(ones(8), WT_HAAR, 3) ≈ [2*sq2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    @test dwt(ones(8), WT_D4, 1) ≈ [sq2, sq2, sq2, sq2, 0.0, 0.0, 0.0, 0.0]
+    lvl1 = [2.0 2.0 0.0 0.0; 2.0 2.0 0.0 0.0; 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0]
+    @test wpt(ones(4, 4), WT_HAAR, 1) ≈ lvl1
+    @test wpt(ones(4, 4), WT_HAAR, (1, 1)) ≈ lvl1
+    @test nsdwt(ones(4, 4), WT_HAAR, 1) ≈ lvl1
+    @test nswpt(ones(4, 4), WT_HAAR, 1) ≈ lvl1
+    lvl2 = [4.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0; 0.0 0.0 0.0 0.0]
+    @test dwt(ones(4, 4), WT_HAAR, 2) ≈ lvl2
+    @test wpt(ones(4, 4), WT_HAAR, (2, 2)) ≈ lvl2
+end
+
 @testset "rtree indexing: lengths OK" begin
     x = rand(4)
     @test rtree_views(x) |> length == 2
@@ -198,4 +297,57 @@ end
     @test rtree_view(rtree_view(x, :l), :h) ≈ @rtview x[:l, :h]
     @test rtree_view(rtree_view(x, :h), :l) ≈ @rtview x[:h, :l]
     @test rtree_view(rtree_view(x, :h), :h) ≈ @rtview x[:h, :h]
+end
+
+@testset "GPU (KernelAbstractions) transforms" begin
+    gpu_ok = false
+    try
+        using CUDA
+        gpu_ok = CUDA.functional()
+    catch
+        gpu_ok = false
+    end
+    if gpu_ok
+        rng = MersenneTwister(7)
+        # forward results must match the CPU implementation, and GPU round
+        # trips must invert, for the standard, wavelet-packet and
+        # nonstandard transforms.
+        for T in (Float32, Float64)
+            for n in (4, 8, 64)
+                x = rand(rng, T, n)
+                for b in (WT_HAAR, WT_D4)
+                    for l in (1, 2, 3)
+                        @test dwt(x, b, l) ≈ Array(dwt(CuArray(x), b, l))
+                        y = wpt(CuArray(x), b, l); iwpt!(y, b, l)
+                        @test x ≈ Array(y)
+                    end
+                end
+            end
+            for (m, n) in ((8, 8), (32, 32))
+                x = rand(rng, T, m, n)
+                for b in (WT_HAAR, WT_D4)
+                    for l in ((1, 1), (2, 2), (2, 3), (3, 2))
+                        @test dwt(x, b, l) ≈ Array(dwt(CuArray(x), b, l))
+                        y = dwt(CuArray(x), b, l); idwt!(y, b, l)
+                        @test x ≈ Array(y)
+                        y = wpt(CuArray(x), b, l); iwpt!(y, b, l)
+                        @test x ≈ Array(y)
+                    end
+                    for l in ((1, 2), (2, 3))
+                        @test nsdwt(x, b, l) ≈ Array(nsdwt(CuArray(x), b, l))
+                        y = nsdwt(CuArray(x), b, l); nsidwt!(y, b, l)
+                        @test x ≈ Array(y)
+                    end
+                end
+            end
+            x = rand(rng, T, 8, 8, 8)
+            for l in ((1, 1, 1), (2, 1, 2))
+                @test dwt(x, WT_D4, l) ≈ Array(dwt(CuArray(x), WT_D4, l))
+                y = dwt(CuArray(x), WT_D4, l); idwt!(y, WT_D4, l)
+                @test x ≈ Array(y)
+            end
+        end
+    else
+        @info "CUDA not available; skipping GPU tests"
+    end
 end

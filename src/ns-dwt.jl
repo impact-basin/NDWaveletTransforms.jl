@@ -6,6 +6,7 @@
     wpt = false
 ) :: AbstractArray{T,1} where {T <: Number}
 
+    is_gpu(x) && return _nsdwt_gpu!(x, w, b, level, wpt = wpt)
     _dwt!(x, w, b, level[1], wpt=wpt,)
     return x
 end
@@ -18,12 +19,15 @@ end
     wpt = false
 ) :: AbstractArray{T,N} where {T <: Number, N}
 
+    is_gpu(x) && return _nsdwt_gpu!(x, w, b, level, wpt = wpt)
+
     s = size(x, N)
+    dims = ntuple(_ -> Colon(), N-1)
 
     @floop for i=1:s
         @strided nsdwt!(
-            x[.., i],
-            w[.., i],
+            view(x, dims..., i),
+            view(w, dims..., i),
             b, level[1:end-1],
             wpt = wpt
         )
@@ -49,6 +53,7 @@ end
     wpt=false
 ) :: AbstractArray{T,1} where {T <: Number}
 
+    is_gpu(x) && return _nsidwt_gpu!(x, w, b, level, wpt = wpt)
     return _idwt!(x, w, b, level[1], wpt=wpt)
 end
 
@@ -61,7 +66,10 @@ end
 ) :: AbstractArray{T,N} where {T <: Number, N}
 
 
+    is_gpu(x) && return _nsidwt_gpu!(x, w, b, level, wpt = wpt)
+
     s = size(x, N)
+    dims = ntuple(_ -> Colon(), N-1)
 
     @floop for i in product([1:size(x)[l] for l=1:N-1]...)
          @strided _idwt!(
@@ -74,8 +82,8 @@ end
 
     @threads for i=1:s
         @strided nsidwt!(
-            x[.., i],
-            w[.., i],
+            view(x, dims..., i),
+            view(w, dims..., i),
             b, level[1:end-1],
             wpt = wpt
         )

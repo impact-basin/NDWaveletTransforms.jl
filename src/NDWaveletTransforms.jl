@@ -19,6 +19,9 @@ using Base.Iterators
 using FLoops
 using EllipsisNotation
 using Strided
+using KernelAbstractions
+using Adapt
+using GPUArraysCore: AbstractGPUArray
 
 include("algorithms.jl")
 export complement
@@ -51,6 +54,7 @@ export rtree_view
 export @rtview
 
 include("innerloops.jl")
+include("gpu.jl")
 include("dwt.jl")
 export dwt!
 export dwt

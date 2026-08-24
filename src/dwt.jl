@@ -13,100 +13,211 @@ end
     ) end
 end
 
-
-@fastfun function dwt!(
-    x :: AbstractArray{T,1},
-    w :: AbstractArray{T,1},
-    b :: WTOrthogonalBasis,
-    l :: Vector;
-    wpt = false
-) :: AbstractArray{T,1} where {T <: Number}
-
-    _dwt!(x, w, b, l[1], wpt=wpt)
-    return x
+macro maybe_thread(s::Symbol, expr...)
+    return quote
+        if $s
+            @inbounds @floop $(expr...)
+        else
+            @inbounds $(expr...)
+        end
+    end |> esc
 end
 
 @fastfun function dwt!(
-    x :: AbstractArray{T,N},
-    w :: AbstractArray{T,N},
+    x :: A,
+    w :: A,
     b :: WTOrthogonalBasis,
     l :: Vector;
-    wpt = false
-) :: AbstractArray{T,N} where {T <: Number, N}
+    wpt = false,
+    top = false
+) :: A where {T <: Number, A <: AbstractArray{T,1}}
 
-    s = size(x, N)
+    is_gpu(x) ? _dwt_gpu!(x, w, b, l, wpt = wpt) : _dwt!(x, w, b, l[1], wpt = wpt)
+    return x
+end
 
-    @floop for (xs, ws) in zipslices_1d(x, w)
-        dwt!(xs, ws, b, [ll >= 1 for ll in l[1:N-1]], wpt = wpt)
+
+@fastfun function dwt!(
+    x :: A,
+    w :: A,
+    b :: WTOrthogonalBasis,
+    l :: Vector;
+    wpt = false,
+    top = true
+) :: A where {T <: Number, N, A <: AbstractArray{T,N}}
+
+    is_gpu(x) && return _dwt_gpu!(x, w, b, l, wpt = wpt)
+
+    l1 = Int.(l[1:N-1] .>= 1)
+    passed1 = any(l1 .> 0) && (N >= 3 || size(x, 1) >= 2)
+    passed2 = l[end] >= 1 && size(x, N) >= 2
+
+    # The level-1 passes are write-through (no copyto!): the data ping-pongs
+    # between x and w instead of being copied back after every pass.
+    # datanow == 1 => data in x, 2 => data in w.
+    datanow = 1
+    if passed1
+        if N == 2
+            @maybe_thread top for (xs, ws) in zipslices_1d(x, w)
+                _dwt_level1!(xs, ws, b)
+            end
+            datanow = 2
+        else
+            @maybe_thread top for (xs, ws) in zipslices_1d(x, w)
+                dwt!(xs, ws, b, l1, wpt = wpt; top=false)
+            end
+        end
     end
 
-    l[end] >= 1 && @floop for (xs, ws) in zipslices_nd(x, w)
-        _dwt!(xs, ws, b, 1, wpt = wpt)
+    if passed2
+        if datanow == 1
+            @maybe_thread top for (xs, ws) in zipslices_nd(x, w)
+                _dwt_level1!(xs, ws, b)
+            end
+            datanow = 2
+        else
+            @maybe_thread top for (xs, ws) in zipslices_nd(w, x)
+                _dwt_level1!(xs, ws, b)
+            end
+            datanow = 1
+        end
     end
 
-    l .-= 1
-    any(l .> 0) && @floop for subspace in subspaces(w, x, wpt)
-        wss, xss = subspace
-        dwt!(xss, wss, b, l, wpt = wpt)
+    lm1 = l .- 1
+    if any(lm1 .> 0)
+        if datanow == 1
+            @maybe_thread top for subspace in subspaces(w, x, wpt)
+                wss, xss = subspace
+                dwt!(xss, wss, b, lm1, wpt = wpt, top=false)
+            end
+        else
+            @maybe_thread top for subspace in subspaces(x, w, wpt)
+                wss, xss = subspace
+                dwt!(xss, wss, b, lm1, wpt = wpt, top=false)
+            end
+        end
     end
 
+    datanow == 2 && copyto!(x, w)
     return x
 end
 
 @fastfun function idwt!(
-    x :: AbstractArray{T, 1},
-    w :: AbstractArray{T, 1},
+    x :: A,
+    w :: A,
     b :: WTOrthogonalBasis,
     l :: Vector;
-    wpt=false
-) :: AbstractArray{T,1} where {T <: Number}
+    wpt=false,
+    top=false
+) :: A where {T <: Number, A <: AbstractArray{T,1}}
 
+    is_gpu(x) && return _idwt_gpu!(x, w, b, l, wpt = wpt)
     return _idwt!(x, w, b, l[1], wpt=wpt)
 end
 
 @fastfun function idwt!(
-    x :: AbstractArray{T, N},
-    w :: AbstractArray{T, N},
+    x :: A,
+    w :: A,
     b :: WTOrthogonalBasis,
     l :: Vector;
-    wpt=false
-) :: AbstractArray{T,N} where {T <: Number, N}
+    wpt=false,
+    top=true
+) :: A where {T <: Number, N, A <: AbstractArray{T,N}}
 
+    is_gpu(x) && return _idwt_gpu!(x, w, b, l, wpt = wpt)
 
-    any(l .> 1) && @floop for subspace in subspaces(w, x, wpt)
+    lm1 = l .- 1
+    any(lm1 .> 0) && @maybe_thread top for subspace in subspaces(w, x, wpt)
         wss, xss = subspace
-        idwt!(xss, wss, b, l .- 1, wpt = wpt)
+        idwt!(xss, wss, b, lm1, wpt = wpt, top=false)
     end
 
-    l .= l .>= 1
+    lc = Int.(l .>= 1)
+    passed2 = lc[end] >= 1 && size(x, N) >= 2
+    l1 = lc[1:N-1]
+    passed1 = any(l1 .> 0) && (N >= 3 || size(x, 1) >= 2)
 
-    l[end] >= 1 && @floop for (xs, ws) in zipslices_nd(x,w)
-        _idwt!(xs, ws, b, 1, wpt = wpt)
+    # Data is in x after the recursion; the level-1 passes are write-through.
+    # datanow == 1 => data in x, 2 => data in w.
+    datanow = 1
+    if passed2
+        @maybe_thread top for (xs, ws) in zipslices_nd(x, w)
+            _idwt_level1!(xs, ws, b)
+        end
+        datanow = 2
     end
 
-    @floop for (xs, ws) in zipslices_1d(x, w)
-        idwt!(xs, ws, b, l[1:N-1], wpt = wpt)
+    if passed1
+        if N == 2
+            if datanow == 1
+                @maybe_thread top for (xs, ws) in zipslices_1d(x, w)
+                    _idwt_level1!(xs, ws, b)
+                end
+                datanow = 2
+            else
+                @maybe_thread top for (xs, ws) in zipslices_1d(w, x)
+                    _idwt_level1!(xs, ws, b)
+                end
+                datanow = 1
+            end
+        elseif datanow == 1
+            @maybe_thread top for (xs, ws) in zipslices_1d(x, w)
+                idwt!(xs, ws, b, l1, wpt = wpt, top=false)
+            end
+        else
+            @maybe_thread top for (xs, ws) in zipslices_1d(w, x)
+                idwt!(xs, ws, b, l1, wpt = wpt, top=false)
+            end
+        end
     end
 
+    datanow == 2 && copyto!(x, w)
     return x
 end
 
-@fastfun dwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
-    dwt!(StridedView(x), StridedView(similar(x)), b, repeat([l], N); wpt = wpt)
+@fastfun function dwt!(x::A, b, l :: Int; wpt = false) :: A where {T, N, A <: AbstractArray{T,N}}
+    w = similar(x)
+    if is_gpu(x)
+        dwt!(x, w, b, repeat([l], N); wpt = wpt)
+    else
+        dwt!(StridedView(x), StridedView(w), b, repeat([l], N); wpt = wpt)
+    end
+end
 
-@fastfun dwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
-    dwt!(StridedView(x), StridedView(similar(x)), b, l |> collect; wpt = wpt)
+@fastfun function dwt!(x::T, b, l; wpt = false) :: T where T
+    w = similar(x)
+    if is_gpu(x)
+        dwt!(x, w, b, l |> collect; wpt = wpt)
+    else
+        dwt!(StridedView(x), StridedView(w), b, l |> collect; wpt = wpt)
+    end
+end
 
-@fastfun idwt!(x::AbstractArray{T,N}, b, l :: Int; wpt = false) where {T,N} =
-    idwt!(StridedView(x), StridedView(similar(x)), b, repeat([l], N); wpt = wpt)
+@fastfun function idwt!(x::A, b, l :: Int; wpt = false) :: A where {T, N, A <: AbstractArray{T,N}}
+    w = similar(x)
+    if is_gpu(x)
+        idwt!(x, w, b, repeat([l], N); wpt = wpt)
+    else
+        idwt!(StridedView(x), StridedView(w), b, repeat([l], N); wpt = wpt)
+    end
+end
 
-@fastfun idwt!(x::AbstractArray{T,N}, b, l; wpt = false) where {T,N} =
-    idwt!(StridedView(x), StridedView(similar(x)), b, l |> collect; wpt = wpt)
+@fastfun function idwt!(x::T, b, l; wpt = false) :: T where T
+    w = similar(x)
+    if is_gpu(x)
+        idwt!(x, w, b, l |> collect; wpt = wpt)
+    else
+        idwt!(StridedView(x), StridedView(w), b, l |> collect; wpt = wpt)
+    end
+end
 
-@fastfun dwt(x::T, rest...; wpt = false) where T =
-    dwt!(copy(x), rest...; wpt = wpt) |> T
-@fastfun idwt(x::T, rest...; wpt = false) where T =
-    idwt!(copy(x), rest...; wpt = wpt) |> T
+@fastfun function dwt(x::T, rest...; wpt = false) :: T where T
+    dwt!(copy(x), rest...; wpt = wpt)
+end
+
+@fastfun function idwt(x::T, rest...; wpt = false) :: T where T
+    idwt!(copy(x), rest...; wpt = wpt)
+end
 
 @fastfun wpt!(args...) = dwt!(args...; wpt=true)
 @fastfun iwpt!(args...) = idwt!(args...; wpt=true)
