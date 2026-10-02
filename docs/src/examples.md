@@ -39,22 +39,8 @@ and pays for it with a blocky reconstruction.
 
 ## Denoising
 
-[`denoise`](@ref) transforms, estimates the noise from the finest detail
-band, thresholds the detail coefficients, and inverts. The approximation band
-is kept, so the smooth part of the signal survives. `cycles > 0` averages the
-estimate over circular shifts with [`cyclespinning!`](@ref).
-
-```julia
-s_denoised = denoise(noisy, WT_D4, 4)
-s_smooth   = denoise(noisy, WT_D4, 4; cycles = 8)
-```
-
-![A noisy signal, the plain estimate, and the cycle-spun estimate.](assets/denoise.png)
-
-The plain estimate leaves small oscillations near the boundary; spinning
-averages them out. [`threshold!`](@ref), [`noisiness`](@ref) and
-[`keeplargest!`](@ref) are the pieces it is built from, and [`compress`](@ref)
-does the same with a fixed coefficient budget.
+[`denoise`](@ref) and the coefficient shrinkage functions are covered on the
+[Algorithms](@ref) page.
 
 ## An image
 

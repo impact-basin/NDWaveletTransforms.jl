@@ -66,3 +66,57 @@ the periodic wrap-around lives. The spin-cycled result follows the step
 more closely and rings less.
 
 `cyclespin!(x, n)` performs one circular shift by `n`, in place.
+## Denoising
+
+The wavelet denoiser is three steps: transform, shrink the detail
+coefficients, invert. [`denoise`](@ref) runs all three, and the pieces are
+exported on their own.
+
+### Shrinking coefficients
+
+[`threshold!`](@ref) applies one of three rules at a threshold `λ`:
+
+- `:soft` subtracts `λ` from the magnitude. The rule is continuous, which
+  keeps the estimate smooth, but it biases every coefficient toward zero.
+- `:hard` keeps a coefficient or zeroes it. It is unbiased for large
+  coefficients and leaves ringing at sharp features.
+- `:garrote` sits between the two, `x (1 - λ^2 / |x|^2)`.
+
+![The three shrinkage rules.](assets/shrinkage.png)
+
+### Choosing the threshold
+
+The default rule is `:universal`, `λ = σ sqrt(2 log n)`, with `σ` estimated
+from the finest detail band by [`noisiness`](@ref), which is the median
+absolute deviation divided by `0.6745`. `:sure` minimises Stein's unbiased
+risk estimate instead, and a number is used as the threshold directly. Only
+the detail coefficients are thresholded; the approximation band is kept, so
+the smooth part of the signal survives.
+
+`cycles > 0` averages the estimate over circular shifts with
+[`cyclespinning!`](@ref).
+
+```julia
+s_denoised = denoise(s, WT_D4, 4)
+s_smooth   = denoise(s, WT_D4, 4; cycles = 8)
+```
+
+![A noisy signal, the plain estimate and the cycle-spun estimate.](assets/denoise.png)
+
+The rules trade bias against ringing:
+
+![The same signal denoised with soft, hard and garrote shrinkage.](assets/denoise-modes.png)
+
+### Two dimensions
+
+The same call works on an image. The noise estimate uses every finest-scale
+detail subband, and the threshold applies to all of them.
+
+```julia
+img_denoised = denoise(noisy_img, WT_D4, 3)
+```
+
+![A noisy image, the denoised estimate and the noise that was removed.](assets/denoise-image.png)
+
+[`compress`](@ref) is the same construction with a fixed coefficient budget
+rather than a threshold.

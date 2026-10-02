@@ -251,6 +251,54 @@ lines!(ax, collect(t), denoise(noisy, WT_D4, 4; cycles = 8); color = :blue, labe
 axislegend(ax; position = :rb, nbanks = 2)
 save(joinpath(ASSETS, "denoise.png"), fig)
 
+# --- shrinkage rules ------------------------------------------------------
+shrink_value(x, λ, mode) = mode === :hard  ? (abs(x) > λ ? x : 0.0) :
+                           mode === :soft  ? sign(x) * max(abs(x) - λ, 0.0) :
+                           (abs(x) > λ ? x * (1 - λ^2 / x^2) : 0.0)
+
+fig = Figure(size = (1100, 400))
+xs = range(-1, 1, length = 401)
+λ = 0.3
+for (i, mode) in enumerate((:soft, :hard, :garrote))
+    axt = Axis(fig[1, i]; title = ":$mode", xlabel = "coefficient", ylabel = i == 1 ? "shrunk" : "")
+    lines!(axt, xs, xs; color = (:gray, 0.6), linestyle = :dash, linewidth = 1)
+    lines!(axt, xs, shrink_value.(xs, λ, mode); color = :black, linewidth = 2)
+    vlines!(axt, [-λ, λ]; color = (:red, 0.4), linestyle = :dot)
+end
+save(joinpath(ASSETS, "shrinkage.png"), fig)
+
+# --- shrinkage rules on a signal ------------------------------------------
+Random.seed!(1)
+n = 512
+t = range(0, 1, length = n)
+clean = sin.(2pi .* 4 .* t) .+ 0.4 .* sin.(2pi .* 12 .* t)
+noisy = clean .+ 0.25 .* randn(n)
+fig = Figure(size = (900, 480))
+axm = Axis(fig[1, 1]; title = "shrinkage rules", xlabel = "t", ylabel = "signal")
+lines!(axm, collect(t), noisy; color = (:gray, 0.3), label = "noisy")
+lines!(axm, collect(t), clean; color = :black, linewidth = 2, label = "clean")
+for (mode, color) in ((:soft, :red), (:hard, :blue), (:garrote, :green))
+    lines!(axm, collect(t), denoise(noisy, WT_D4, 5; mode = mode); color = color, label = ":$mode")
+end
+axislegend(axm; position = :rb, nbanks = 2)
+save(joinpath(ASSETS, "denoise-modes.png"), fig)
+
+# --- denoising an image ---------------------------------------------------
+Random.seed!(5)
+noisy_img = clamp.(img .+ 0.2 .* randn(size(img)), 0, 1)
+den_img = denoise(noisy_img, WT_D4, 3)
+resid = noisy_img .- den_img
+fig = Figure(size = (1300, 380))
+panels = (("noisy", noisy_img, :viridis, (0.0, 1.0)),
+          ("denoised", den_img, :viridis, (0.0, 1.0)),
+          ("removed", resid, :balance, (-0.5, 0.5)))
+for (i, (title, im, cmap, crange)) in enumerate(panels)
+    axi = Axis(fig[1, i]; title = title, yreversed = true, aspect = DataAspect())
+    heatmap!(axi, im; colormap = cmap, colorrange = crange)
+    hidedecorations!(axi); hidespines!(axi)
+end
+save(joinpath(ASSETS, "denoise-image.png"), fig)
+
 # --- cycle spinning -------------------------------------------------------
 function denoise!(x)
     dwt!(x, WT_D4, 4)
