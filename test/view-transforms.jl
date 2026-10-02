@@ -24,11 +24,12 @@ function view_case(T, dims, extra, convention)
     before = copy(x)
     ll = rtree_view(x, :ll)
     ref = copy(ll)
-    mask = rtree_view(fill(true, size(x)), :ll)
+    outside = trues(size(x))
+    rtree_view(outside, :ll) .= false
 
     dwt!(ll, WT_HAAR, extra; convention = convention)
     @test ll ≈ dwt(ref, WT_HAAR, extra; convention = convention)
-    @test x[.!mask] == before[.!mask]
+    @test x[outside] == before[outside]
 
     idwt!(ll, WT_HAAR, extra; convention = convention)
     @test ll ≈ ref
@@ -52,11 +53,12 @@ end
 
     before = copy(x)
     ref = copy(@rtview x[:ll])
-    mask = rtree_view(fill(true, size(x)), :ll)
+    outside = trues(size(x))
+    rtree_view(outside, :ll) .= false
 
     dwt!(@rtview(x[:ll]), WT_HAAR, 2)
     @test @rtview(x[:ll]) ≈ dwt(ref, WT_HAAR, 2)
-    @test x[.!mask] == before[.!mask]
+    @test x[outside] == before[outside]
 
     idwt!(@rtview(x[:ll]), WT_HAAR, 2)
     @test @rtview(x[:ll]) ≈ ref

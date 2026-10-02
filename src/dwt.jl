@@ -39,6 +39,7 @@ const _THREAD_MIN_WORK = 500_000
     convention = :aligned
 ) :: A where {T <: Number, A <: AbstractArray{T,1}}
 
+    size(x) == size(w) || throw(DimensionMismatch("x and w must have the same size"))
     is_gpu(x) ? _dwt_gpu!(x, w, b, l, Val(convention), wpt = wpt) :
                 _dwt!(x, w, b, l[1], Val(convention), wpt = wpt)
     return x
@@ -55,6 +56,7 @@ end
     convention = :aligned
 ) :: A where {T <: Number, N, A <: AbstractArray{T,N}}
 
+    size(x) == size(w) || throw(DimensionMismatch("x and w must have the same size"))
     is_gpu(x) && return _dwt_gpu!(x, w, b, l, Val(convention), wpt = wpt)
     return _dwt_nd!(x, w, b, l, Val(convention); wpt = wpt, top = top)
 end
@@ -115,6 +117,7 @@ end
     convention = :aligned
 ) :: A where {T <: Number, A <: AbstractArray{T,1}}
 
+    size(x) == size(w) || throw(DimensionMismatch("x and w must have the same size"))
     is_gpu(x) && return _idwt_gpu!(x, w, b, l, Val(convention), wpt = wpt)
     return _idwt!(x, w, b, l[1], Val(convention), wpt=wpt)
 end
@@ -129,6 +132,7 @@ end
     convention = :aligned
 ) :: A where {T <: Number, N, A <: AbstractArray{T,N}}
 
+    size(x) == size(w) || throw(DimensionMismatch("x and w must have the same size"))
     is_gpu(x) && return _idwt_gpu!(x, w, b, l, Val(convention), wpt = wpt)
     return _idwt_nd!(x, w, b, l, Val(convention); wpt = wpt, top = top)
 end
@@ -229,8 +233,10 @@ end
 
     n = size(x, ax)
     npairs = n >> 1
-    s = strides(x)
-    sa = s[ax]
+    sx = strides(x)
+    sw = strides(w)
+    sa = sx[ax]
+    saw = sw[ax]
     px = Base.unsafe_convert(Ptr{T}, x)
     pw = Base.unsafe_convert(Ptr{T}, w)
     φ = T.(b.φ)
@@ -242,7 +248,8 @@ end
     if CONTIG
         # lines (along axis 1) are memory-contiguous: line-outer, pair-inner.
         @maybe_thread dothread for c in CartesianIndices(ntuple(d -> d == 1 ? 1 : size(x, d), N))
-            base = _line_base(Val(N), s, c, 1)
+            base  = _line_base(Val(N), sx, c, 1)
+            basew = _line_base(Val(N), sw, c, 1)
             @simd for p in 1:nplain
                 sφ = zero(T)
                 sψ = zero(T)
@@ -251,8 +258,8 @@ end
                     sφ += φ[k] * xv
                     sψ += ψ[k] * xv
                 end
-                unsafe_store!(pw, sφ, base + p - 1)
-                unsafe_store!(pw, sψ, base + npairs + p - 1)
+                unsafe_store!(pw, sφ, basew + p - 1)
+                unsafe_store!(pw, sψ, basew + npairs + p - 1)
             end
             @simd for p in nplain+1:npairs
                 sφ = zero(T)
@@ -262,8 +269,8 @@ end
                     sφ += φ[k] * xv
                     sψ += ψ[k] * xv
                 end
-                unsafe_store!(pw, sφ, base + p - 1)
-                unsafe_store!(pw, sψ, base + npairs + p - 1)
+                unsafe_store!(pw, sφ, basew + p - 1)
+                unsafe_store!(pw, sψ, basew + npairs + p - 1)
             end
         end
     else
@@ -282,7 +289,8 @@ end
             for p in 1:npairs
                 if p <= nplain
                     for f in f0:f1
-                        base = _block_base(s, odims, odsize, f)
+                        base  = _block_base(sx, odims, odsize, f)
+                        basew = _block_base(sw, odims, odsize, f)
                         @simd for i1 in 1:n1
                             sφ = zero(T)
                             sψ = zero(T)
@@ -291,13 +299,14 @@ end
                                 sφ += φ[k] * xv
                                 sψ += ψ[k] * xv
                             end
-                            unsafe_store!(pw, sφ, base + i1 - 1 + (p - 1) * sa)
-                            unsafe_store!(pw, sψ, base + i1 - 1 + (npairs + p - 1) * sa)
+                            unsafe_store!(pw, sφ, basew + i1 - 1 + (p - 1) * saw)
+                            unsafe_store!(pw, sψ, basew + i1 - 1 + (npairs + p - 1) * saw)
                         end
                     end
                 else
                     for f in f0:f1
-                        base = _block_base(s, odims, odsize, f)
+                        base  = _block_base(sx, odims, odsize, f)
+                        basew = _block_base(sw, odims, odsize, f)
                         @simd for i1 in 1:n1
                             sφ = zero(T)
                             sψ = zero(T)
@@ -306,8 +315,8 @@ end
                                 sφ += φ[k] * xv
                                 sψ += ψ[k] * xv
                             end
-                            unsafe_store!(pw, sφ, base + i1 - 1 + (p - 1) * sa)
-                            unsafe_store!(pw, sψ, base + i1 - 1 + (npairs + p - 1) * sa)
+                            unsafe_store!(pw, sφ, basew + i1 - 1 + (p - 1) * saw)
+                            unsafe_store!(pw, sψ, basew + i1 - 1 + (npairs + p - 1) * saw)
                         end
                     end
                 end
@@ -332,8 +341,10 @@ end
 
     n = size(x, ax)
     npairs = n >> 1
-    s = strides(x)
-    sa = s[ax]
+    sx = strides(x)
+    sw = strides(w)
+    sa = sx[ax]
+    saw = sw[ax]
     px = Base.unsafe_convert(Ptr{T}, x)
     pw = Base.unsafe_convert(Ptr{T}, w)
     φ = T.(b.φ)
@@ -345,34 +356,35 @@ end
 
     if CONTIG
         @maybe_thread dothread for c in CartesianIndices(ntuple(d -> d == 1 ? 1 : size(x, d), N))
-            base = _line_base(Val(N), s, c, 1)
+            base  = _line_base(Val(N), sx, c, 1)
+            basew = _line_base(Val(N), sw, c, 1)
             @simd for p in 1:nplain
                 sφ = zero(T)
                 @fastmath for k in 1:ntaps
                     sφ += φ[k] * unsafe_load(px, base + 2p + k - 3)
                 end
-                unsafe_store!(pw, sφ, base + p - 1)
+                unsafe_store!(pw, sφ, basew + p - 1)
             end
             @simd for p in nplain+1:npairs
                 sφ = zero(T)
                 @fastmath for k in 1:ntaps
                     sφ += φ[k] * unsafe_load(px, base + mod1(2p - 1 + k - 1, n) - 1)
                 end
-                unsafe_store!(pw, sφ, base + p - 1)
+                unsafe_store!(pw, sφ, basew + p - 1)
             end
             @simd for p in 1:min(nwrap, npairs)
                 sψ = zero(T)
                 @fastmath for k in 1:ntaps
                     sψ += ψ[k] * unsafe_load(px, base + mod1(2p - ntaps + k, n) - 1)
                 end
-                unsafe_store!(pw, sψ, base + npairs + p - 1)
+                unsafe_store!(pw, sψ, basew + npairs + p - 1)
             end
             @simd for p in max(1, nwrap+1):npairs
                 sψ = zero(T)
                 @fastmath for k in 1:ntaps
                     sψ += ψ[k] * unsafe_load(px, base + 2p - ntaps + k - 1)
                 end
-                unsafe_store!(pw, sψ, base + npairs + p - 1)
+                unsafe_store!(pw, sψ, basew + npairs + p - 1)
             end
         end
     else
@@ -387,47 +399,51 @@ end
             for p in 1:npairs
                 if p <= nplain
                     for f in f0:f1
-                        base = _block_base(s, odims, odsize, f)
+                        base  = _block_base(sx, odims, odsize, f)
+                        basew = _block_base(sw, odims, odsize, f)
                         @simd for i1 in 1:n1
                             sφ = zero(T)
                             @fastmath for k in 1:ntaps
                                 sφ += φ[k] * unsafe_load(px, base + i1 - 1 + (2p - 2 + k - 1) * sa)
                             end
-                            unsafe_store!(pw, sφ, base + i1 - 1 + (p - 1) * sa)
+                            unsafe_store!(pw, sφ, basew + i1 - 1 + (p - 1) * saw)
                         end
                     end
                 else
                     for f in f0:f1
-                        base = _block_base(s, odims, odsize, f)
+                        base  = _block_base(sx, odims, odsize, f)
+                        basew = _block_base(sw, odims, odsize, f)
                         @simd for i1 in 1:n1
                             sφ = zero(T)
                             @fastmath for k in 1:ntaps
                                 sφ += φ[k] * unsafe_load(px, base + i1 - 1 + (mod1(2p - 1 + k - 1, n) - 1) * sa)
                             end
-                            unsafe_store!(pw, sφ, base + i1 - 1 + (p - 1) * sa)
+                            unsafe_store!(pw, sφ, basew + i1 - 1 + (p - 1) * saw)
                         end
                     end
                 end
                 if p <= nwrap
                     for f in f0:f1
-                        base = _block_base(s, odims, odsize, f)
+                        base  = _block_base(sx, odims, odsize, f)
+                        basew = _block_base(sw, odims, odsize, f)
                         @simd for i1 in 1:n1
                             sψ = zero(T)
                             @fastmath for k in 1:ntaps
                                 sψ += ψ[k] * unsafe_load(px, base + i1 - 1 + (mod1(2p - ntaps + k, n) - 1) * sa)
                             end
-                            unsafe_store!(pw, sψ, base + i1 - 1 + (npairs + p - 1) * sa)
+                            unsafe_store!(pw, sψ, basew + i1 - 1 + (npairs + p - 1) * saw)
                         end
                     end
                 else
                     for f in f0:f1
-                        base = _block_base(s, odims, odsize, f)
+                        base  = _block_base(sx, odims, odsize, f)
+                        basew = _block_base(sw, odims, odsize, f)
                         @simd for i1 in 1:n1
                             sψ = zero(T)
                             @fastmath for k in 1:ntaps
                                 sψ += ψ[k] * unsafe_load(px, base + i1 - 1 + (2p - ntaps + k - 1) * sa)
                             end
-                            unsafe_store!(pw, sψ, base + i1 - 1 + (npairs + p - 1) * sa)
+                            unsafe_store!(pw, sψ, basew + i1 - 1 + (npairs + p - 1) * saw)
                         end
                     end
                 end
@@ -460,8 +476,10 @@ end
 
     n = size(x, ax)
     m = n >> 1
-    s = strides(x)
-    sa = s[ax]
+    sx = strides(x)
+    sw = strides(w)
+    sa = sx[ax]
+    saw = sw[ax]
     px = Base.unsafe_convert(Ptr{T}, x)
     pw = Base.unsafe_convert(Ptr{T}, w)
     φ = T.(b.φ)
@@ -471,22 +489,23 @@ end
 
     if CONTIG
         @maybe_thread dothread for c in CartesianIndices(ntuple(d -> d == 1 ? 1 : size(x, d), N))
-            base = _line_base(Val(N), s, c, 1)
+            base  = _line_base(Val(N), sx, c, 1)
+            basew = _line_base(Val(N), sw, c, 1)
             @simd for j in 0:n-1
-                unsafe_store!(pw, zero(T), base + j)
+                unsafe_store!(pw, zero(T), basew + j)
             end
             for k in 1:ntaps
                 φk = φ[k]
                 ψk = ψ[k]
                 nplain = max(0, min(fld(n - k + 2, 2), m))
                 @simd for i in 1:nplain
-                    off = base + 2i + k - 3
+                    off = basew + 2i + k - 3
                     unsafe_store!(pw, unsafe_load(pw, off) +
                                    unsafe_load(px, base + i - 1) * φk +
                                    unsafe_load(px, base + m + i - 1) * ψk, off)
                 end
                 @simd for i in max(1, nplain+1):m
-                    off = base + mod1(2i + k - 2, n) - 1
+                    off = basew + mod1(2i + k - 2, n) - 1
                     unsafe_store!(pw, unsafe_load(pw, off) +
                                    unsafe_load(px, base + i - 1) * φk +
                                    unsafe_load(px, base + m + i - 1) * ψk, off)
@@ -512,7 +531,8 @@ end
             f1 = min(blk * _PASS_BLOCK, ngrid)
             for j in 1:n
                 for f in f0:f1
-                    base = _block_base(s, odims, odsize, f)
+                    base  = _block_base(sx, odims, odsize, f)
+                    basew = _block_base(sw, odims, odsize, f)
                     @simd for i1 in 1:n1
                         acc = zero(T)
                         for t in 0:tmax_t
@@ -524,7 +544,7 @@ end
                                        unsafe_load(px, base + i1 - 1 + (m + i - 1) * sa) * ψv[k]
                             end
                         end
-                        unsafe_store!(pw, acc, base + i1 - 1 + (j - 1) * sa)
+                        unsafe_store!(pw, acc, basew + i1 - 1 + (j - 1) * saw)
                     end
                 end
             end
@@ -542,12 +562,13 @@ end
             f0 = (blk - 1) * _PASS_BLOCK + 1
             f1 = min(blk * _PASS_BLOCK, ngrid)
             for f in f0:f1
-                base = _block_base(s, odims, odsize, f)
+                base  = _block_base(sx, odims, odsize, f)
+                basew = _block_base(sw, odims, odsize, f)
                 # zero every line: all n1 dim-1 positions of each of the n
                 # line positions
                 for j in 0:n-1
                     @simd for i1 in 1:n1
-                        unsafe_store!(pw, zero(T), base + i1 - 1 + j * sa)
+                        unsafe_store!(pw, zero(T), basew + i1 - 1 + j * saw)
                     end
                 end
             end
@@ -556,10 +577,11 @@ end
                 ψk = ψ[k]
                 nplain = max(0, min(fld(n - k + 2, 2), m))
                 for f in f0:f1
-                    base = _block_base(s, odims, odsize, f)
+                    base  = _block_base(sx, odims, odsize, f)
+                    basew = _block_base(sw, odims, odsize, f)
                     @inbounds for i in 1:nplain
                         @simd for i1 in 1:n1
-                            off = base + i1 - 1 + (2i - 2 + k - 1) * sa
+                            off = basew + i1 - 1 + (2i - 2 + k - 1) * saw
                             unsafe_store!(pw, unsafe_load(pw, off) +
                                            unsafe_load(px, base + i1 - 1 + (i - 1) * sa) * φk +
                                            unsafe_load(px, base + i1 - 1 + (m + i - 1) * sa) * ψk, off)
@@ -567,7 +589,7 @@ end
                     end
                     @inbounds for i in max(1, nplain+1):m
                         @simd for i1 in 1:n1
-                            off = base + i1 - 1 + (mod1(2i - 1 + k - 1, n) - 1) * sa
+                            off = basew + i1 - 1 + (mod1(2i - 1 + k - 1, n) - 1) * saw
                             unsafe_store!(pw, unsafe_load(pw, off) +
                                            unsafe_load(px, base + i1 - 1 + (i - 1) * sa) * φk +
                                            unsafe_load(px, base + i1 - 1 + (m + i - 1) * sa) * ψk, off)
@@ -595,8 +617,10 @@ end
 
     n = size(x, ax)
     m = n >> 1
-    s = strides(x)
-    sa = s[ax]
+    sx = strides(x)
+    sw = strides(w)
+    sa = sx[ax]
+    saw = sw[ax]
     px = Base.unsafe_convert(Ptr{T}, x)
     pw = Base.unsafe_convert(Ptr{T}, w)
     φ = T.(b.φ)
@@ -606,21 +630,22 @@ end
 
     if CONTIG
         @maybe_thread dothread for c in CartesianIndices(ntuple(d -> d == 1 ? 1 : size(x, d), N))
-            base = _line_base(Val(N), s, c, 1)
+            base  = _line_base(Val(N), sx, c, 1)
+            basew = _line_base(Val(N), sw, c, 1)
             @simd for j in 0:n-1
-                unsafe_store!(pw, zero(T), base + j)
+                unsafe_store!(pw, zero(T), basew + j)
             end
             # scaling pass (aligned window, tail wraps)
             for k in 1:ntaps
                 φk = φ[k]
                 nplain = max(0, min(fld(n - k + 2, 2), m))
                 @simd for i in 1:nplain
-                    off = base + 2i + k - 3
+                    off = basew + 2i + k - 3
                     unsafe_store!(pw, unsafe_load(pw, off) +
                                    unsafe_load(px, base + i - 1) * φk, off)
                 end
                 @simd for i in max(1, nplain+1):m
-                    off = base + mod1(2i + k - 2, n) - 1
+                    off = basew + mod1(2i + k - 2, n) - 1
                     unsafe_store!(pw, unsafe_load(pw, off) +
                                    unsafe_load(px, base + i - 1) * φk, off)
                 end
@@ -630,12 +655,12 @@ end
                 ψk = ψ[k]
                 nwrapk = min(fld(ntaps - k, 2), m)
                 @simd for i in 1:nwrapk
-                    off = base + mod1(2i - ntaps + k, n) - 1
+                    off = basew + mod1(2i - ntaps + k, n) - 1
                     unsafe_store!(pw, unsafe_load(pw, off) +
                                    unsafe_load(px, base + m + i - 1) * ψk, off)
                 end
                 @simd for i in nwrapk+1:m
-                    off = base + 2i - ntaps + k - 1
+                    off = basew + 2i - ntaps + k - 1
                     unsafe_store!(pw, unsafe_load(pw, off) +
                                    unsafe_load(px, base + m + i - 1) * ψk, off)
                 end
@@ -657,7 +682,8 @@ end
             f1 = min(blk * _PASS_BLOCK, ngrid)
             for j in 1:n
                 for f in f0:f1
-                    base = _block_base(s, odims, odsize, f)
+                    base  = _block_base(sx, odims, odsize, f)
+                    basew = _block_base(sw, odims, odsize, f)
                     @simd for i1 in 1:n1
                         acc = zero(T)
                         # scaling pass
@@ -678,7 +704,7 @@ end
                                 acc += unsafe_load(px, base + i1 - 1 + (m + i - 1) * sa) * ψv[k]
                             end
                         end
-                        unsafe_store!(pw, acc, base + i1 - 1 + (j - 1) * sa)
+                        unsafe_store!(pw, acc, basew + i1 - 1 + (j - 1) * saw)
                     end
                 end
             end
@@ -695,12 +721,13 @@ end
             f0 = (blk - 1) * _PASS_BLOCK + 1
             f1 = min(blk * _PASS_BLOCK, ngrid)
             for f in f0:f1
-                base = _block_base(s, odims, odsize, f)
+                base  = _block_base(sx, odims, odsize, f)
+                basew = _block_base(sw, odims, odsize, f)
                 # zero every line: all n1 dim-1 positions of each of the n
                 # line positions
                 for j in 0:n-1
                     @simd for i1 in 1:n1
-                        unsafe_store!(pw, zero(T), base + i1 - 1 + j * sa)
+                        unsafe_store!(pw, zero(T), basew + i1 - 1 + j * saw)
                     end
                 end
             end
@@ -709,17 +736,18 @@ end
                 φk = φ[k]
                 nplain = max(0, min(fld(n - k + 2, 2), m))
                 for f in f0:f1
-                    base = _block_base(s, odims, odsize, f)
+                    base  = _block_base(sx, odims, odsize, f)
+                    basew = _block_base(sw, odims, odsize, f)
                     @inbounds for i in 1:nplain
                         @simd for i1 in 1:n1
-                            off = base + i1 - 1 + (2i - 2 + k - 1) * sa
+                            off = basew + i1 - 1 + (2i - 2 + k - 1) * saw
                             unsafe_store!(pw, unsafe_load(pw, off) +
                                            unsafe_load(px, base + i1 - 1 + (i - 1) * sa) * φk, off)
                         end
                     end
                     @inbounds for i in max(1, nplain+1):m
                         @simd for i1 in 1:n1
-                            off = base + i1 - 1 + (mod1(2i - 1 + k - 1, n) - 1) * sa
+                            off = basew + i1 - 1 + (mod1(2i - 1 + k - 1, n) - 1) * saw
                             unsafe_store!(pw, unsafe_load(pw, off) +
                                            unsafe_load(px, base + i1 - 1 + (i - 1) * sa) * φk, off)
                         end
@@ -731,17 +759,18 @@ end
                 ψk = ψ[k]
                 nwrapk = min(fld(ntaps - k, 2), m)
                 for f in f0:f1
-                    base = _block_base(s, odims, odsize, f)
+                    base  = _block_base(sx, odims, odsize, f)
+                    basew = _block_base(sw, odims, odsize, f)
                     @inbounds for i in 1:nwrapk
                         @simd for i1 in 1:n1
-                            off = base + i1 - 1 + (mod1(2i - ntaps + k, n) - 1) * sa
+                            off = basew + i1 - 1 + (mod1(2i - ntaps + k, n) - 1) * saw
                             unsafe_store!(pw, unsafe_load(pw, off) +
                                            unsafe_load(px, base + i1 - 1 + (m + i - 1) * sa) * ψk, off)
                         end
                     end
                     @inbounds for i in nwrapk+1:m
                         @simd for i1 in 1:n1
-                            off = base + i1 - 1 + (2i - ntaps + k - 1) * sa
+                            off = basew + i1 - 1 + (2i - ntaps + k - 1) * saw
                             unsafe_store!(pw, unsafe_load(pw, off) +
                                            unsafe_load(px, base + i1 - 1 + (m + i - 1) * sa) * ψk, off)
                         end
@@ -760,6 +789,7 @@ end
     else
         dwt!(StridedView(x), StridedView(w), b, repeat([l], N); wpt = wpt, convention = convention)
     end
+    return x
 end
 
 @fastfun function dwt!(x::T, b, l; wpt = false, convention = :aligned) :: T where T
@@ -769,6 +799,7 @@ end
     else
         dwt!(StridedView(x), StridedView(w), b, l |> collect; wpt = wpt, convention = convention)
     end
+    return x
 end
 
 @fastfun function idwt!(x::A, b, l :: Int; wpt = false, convention = :aligned) :: A where {T, N, A <: AbstractArray{T,N}}
@@ -778,6 +809,7 @@ end
     else
         idwt!(StridedView(x), StridedView(w), b, repeat([l], N); wpt = wpt, convention = convention)
     end
+    return x
 end
 
 @fastfun function idwt!(x::T, b, l; wpt = false, convention = :aligned) :: T where T
@@ -787,6 +819,7 @@ end
     else
         idwt!(StridedView(x), StridedView(w), b, l |> collect; wpt = wpt, convention = convention)
     end
+    return x
 end
 
 @fastfun function dwt(x::T, rest...; wpt = false, convention = :aligned) :: T where T

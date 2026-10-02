@@ -496,3 +496,5 @@ end
         @info "CUDA not available; skipping GPU tests"
     end
 end
+
+include("view-transforms.jl")
