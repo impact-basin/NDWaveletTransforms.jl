@@ -1,3 +1,12 @@
+"""
+    nsdwt!(x, b, l; convention = :aligned)
+
+Nonstandard discrete wavelet transform of `x` in place, and return `x`. The
+nonstandard transform applies every level along one axis before moving to the
+next, while [`dwt!`](@ref) advances one level along every axis at a time. The
+two agree for a single level and differ deeper. The arguments are those of
+[`dwt!`](@ref).
+"""
 @fastfun function nsdwt!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
@@ -77,6 +86,11 @@ end
     return x
 end
 
+"""
+    nsidwt!(x, b, l; convention = :aligned)
+
+Invert a nonstandard wavelet transform in place, and return `x`.
+"""
 @fastfun function nsidwt!(
     x :: AbstractArray{T, 1},
     w :: AbstractArray{T, 1},
@@ -168,12 +182,42 @@ end
 @fastfun nsidwt!(x::AbstractArray{T,N}, b, l; wpt = false, convention = :aligned) where {T,N} =
     nsidwt!(x, similar(x), b, l; wpt = wpt, convention = convention)
 
+"""
+    nsdwt(x, b, l; convention = :aligned)
+
+Return a nonstandard-transformed copy of `x`.
+"""
 @fastfun nsdwt(x, rest...; wpt = false, convention = :aligned) =
     nsdwt!(copy(x), rest...; wpt = wpt, convention = convention)
+"""
+    nsidwt(x, b, l; convention = :aligned)
+
+Return an inverse nonstandard-transformed copy of `x`.
+"""
 @fastfun nsidwt(x, rest...; wpt = false, convention = :aligned) =
     nsidwt!(copy(x), rest...; wpt = wpt, convention = convention)
 
+"""
+    nswpt!(x, b, l; convention = :aligned)
+
+Nonstandard wavelet packet transform of `x` in place, and return `x`.
+"""
 @fastfun nswpt!(args...; convention = :aligned) = nsdwt!(args...; wpt=true, convention = convention)
+"""
+    nsiwpt!(x, b, l; convention = :aligned)
+
+Invert a nonstandard wavelet packet transform in place, and return `x`.
+"""
 @fastfun nsiwpt!(args...; convention = :aligned) = nsidwt!(args...; wpt=true, convention = convention)
+"""
+    nswpt(x, b, l; convention = :aligned)
+
+Return a nonstandard packet-transformed copy of `x`.
+"""
 @fastfun nswpt(args...; convention = :aligned) = nsdwt(args...; wpt=true, convention = convention)
+"""
+    nsiwpt(x, b, l; convention = :aligned)
+
+Return an inverse nonstandard packet-transformed copy of `x`.
+"""
 @fastfun nsiwpt(args...; convention = :aligned) = nsidwt(args...; wpt=true, convention = convention)

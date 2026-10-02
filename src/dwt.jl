@@ -17,6 +17,44 @@ end
 # (lines x pairs x ntaps) before a pass is threaded.
 const _THREAD_MIN_WORK = 500_000
 
+"""
+    dwt!(x, b, l; convention = :aligned)
+    dwt!(x, w, b, l; convention = :aligned)
+
+Transform `x` in place with basis `b`, and return `x`.
+
+`l` sets the number of levels. An `Int` applies the same number along every
+axis; an `NTuple{N,Int}` or `Vector{Int}` sets the level along each axis
+separately. A dimension of length `n` supports `l` levels of perfect
+reconstruction when `2^l` divides `n`, and is transformed as far as it
+divides beyond that.
+
+The four-argument form takes `w`, a scratch array with the same size and
+element type as `x`, and avoids the allocation that the three-argument form
+makes.
+
+`convention` selects the phase of the detail coefficients. `:aligned` (the
+default) applies the scaling and wavelet filters to the same input window.
+`:wavelets` reproduces the coefficient layout of Wavelets.jl. The scaling
+coefficients are identical in both conventions.
+
+`x` may be any strided `AbstractArray`, including a subband view from
+[`rtree_view`](@ref), or a GPU array.
+
+# Examples
+
+```julia
+using NDWaveletTransforms
+
+x = rand(128, 128)
+dwt!(copy(x), WT_D4, 2)         # two levels along both axes
+dwt!(copy(x), WT_D4, (1, 3))    # one level along axis 1, three along axis 2
+idwt!(dwt(x, WT_D4, 2), WT_D4, 2) ≈ x
+```
+
+See also [`dwt`](@ref), [`idwt!`](@ref), [`wpt!`](@ref), and the
+[Phase conventions](@ref) page.
+"""
 @fastfun function dwt!(
     x :: A,
     w :: A,
@@ -95,6 +133,14 @@ end
     return x
 end
 
+"""
+    idwt!(x, b, l; convention = :aligned)
+    idwt!(x, w, b, l; convention = :aligned)
+
+Invert a wavelet transform in place, and return `x`. The arguments are those
+of [`dwt!`](@ref); `convention` must match the one used for the forward
+transform.
+"""
 @fastfun function idwt!(
     x :: A,
     w :: A,
@@ -201,15 +247,49 @@ end
     return x
 end
 
+"""
+    dwt(x, b, l; convention = :aligned)
+
+Return a transformed copy of `x`. The copying form of [`dwt!`](@ref).
+"""
 @fastfun function dwt(x::T, rest...; wpt = false, convention = :aligned) :: T where T
     dwt!(copy(x), rest...; wpt = wpt, convention = convention)
 end
 
+"""
+    idwt(x, b, l; convention = :aligned)
+
+Return an inverse-transformed copy of `x`. The copying form of
+[`idwt!`](@ref).
+"""
 @fastfun function idwt(x::T, rest...; wpt = false, convention = :aligned) :: T where T
     idwt!(copy(x), rest...; wpt = wpt, convention = convention)
 end
 
+"""
+    wpt!(x, b, l; convention = :aligned)
+
+Wavelet packet transform of `x` in place, and return `x`. Equivalent to
+`dwt!(x, b, l; wpt = true)`: the recursion is applied to every subband rather
+than only the approximation band.
+"""
 @fastfun wpt!(args...; convention = :aligned) = dwt!(args...; wpt=true, convention = convention)
+"""
+    iwpt!(x, b, l; convention = :aligned)
+
+Invert a wavelet packet transform in place, and return `x`.
+"""
 @fastfun iwpt!(args...; convention = :aligned) = idwt!(args...; wpt=true, convention = convention)
+"""
+    wpt(x, b, l; convention = :aligned)
+
+Return a packet-transformed copy of `x`. The copying form of
+[`wpt!`](@ref).
+"""
 @fastfun wpt(args...; convention = :aligned) = dwt(args...; wpt=true, convention = convention)
+"""
+    iwpt(x, b, l; convention = :aligned)
+
+Return an inverse packet-transformed copy of `x`.
+"""
 @fastfun iwpt(args...; convention = :aligned) = idwt(args...; wpt=true, convention = convention)

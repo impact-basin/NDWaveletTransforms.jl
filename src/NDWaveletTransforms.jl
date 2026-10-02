@@ -8,6 +8,7 @@ end
 
 using StyledStrings
 using StaticArrays
+using Primes
 using LinearAlgebra
 using Base.Threads
 using MacroTools: @capture, postwalk, prewalk

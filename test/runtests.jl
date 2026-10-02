@@ -1,5 +1,6 @@
 using Test
 using Random
+using StaticArrays
 using NDWaveletTransforms
 import Wavelets as W
 import FLoops
@@ -517,6 +518,30 @@ end
     else
         @info "single-threaded; skipping the FLoops box check"
     end
+end
+
+@testset "spin cycling" begin
+    x = collect(1.0:8.0)
+    y = copy(x)
+    cyclespin!(y, 2)
+    @test y == [3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 1.0, 2.0]
+
+    z = copy(x)
+    cyclespin!(z, 3)
+    cyclespin!(z, -3)
+    @test z == x
+
+    w = rand(32, 32)
+    before = copy(w)
+    calls = Ref(0)
+    cyclespinning!(w, 3) do v
+        calls[] += 1
+        v .+= 1
+    end
+    @test calls[] == 3
+    @test w == before .+ 3
+
+    @test complement(SVector{2, Float64}(1, -1)) == SVector{2, Float64}(1, 1)
 end
 
 @testset "Aqua" begin
