@@ -27,14 +27,25 @@ idwt!(a, WT_D4, 3; convention = :aligned)      # round trips
 anything at run time. Use `:aligned` unless you need to match Wavelets.jl
 or reproduce a coefficient layout computed elsewhere.
 
-![The level-1 detail band under both conventions, and the difference of a two-dimensional level-1 transform.](assets/conventions.png)
+## One dimension
 
-The left panel shows the level-1 detail band of a one-dimensional D8
-transform under both conventions; the two sequences are the same, rotated
-by three samples. The right panel is the difference of a two-dimensional
-level-1 D4 transform. The approximation band in the top-left corner is
-exactly zero, because the scaling coefficients agree; the detail bands are
-where the two conventions part ways.
+A rectangular pulse, with its level-1 detail coefficients under both
+conventions. The pulse has two edges, so the detail band has two responses.
+Each response is the same shape in both conventions, rotated by three
+coefficients.
+
+![The level-1 detail band of a one-dimensional transform under both conventions.](assets/phase-1d.png)
+
+## Two dimensions
+
+The same comparison on an image. The first panel is the image. The second
+is the aligned level-1 coefficients, with the approximation band in the
+top-left corner. The third is the difference between the two conventions.
+It is exactly zero in the approximation band, because the scaling
+coefficients agree, and non-zero in every detail band, because those
+coefficients are rotated.
+
+![The image, the aligned coefficients, and the difference between the conventions for a two-dimensional transform.](assets/phase-2d.png)
 
 ## The wavelet under each convention
 

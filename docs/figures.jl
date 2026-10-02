@@ -115,22 +115,39 @@ for (i, (name, fun)) in enumerate(families)
 end
 save(joinpath(ASSETS, "families.png"), fig)
 
-# --- phase conventions ----------------------------------------------------
+# --- phase conventions: one dimension -------------------------------------
 n = 256
-t, s = test_signal(n)
-al = dwt(s, WT_D8, 1; convention = :aligned)
-wv = dwt(s, WT_D8, 1; convention = :wavelets)
-fig = Figure(size = (1100, 440))
-ax1 = Axis(fig[1, 1]; title = "level-1 detail, D8", xlabel = "index", ylabel = "coefficient")
-half = n >> 1
-lines!(ax1, 1:half, al[half+1:end]; label = ":aligned", linewidth = 2)
-lines!(ax1, 1:half, wv[half+1:end]; label = ":wavelets", linewidth = 2, linestyle = :dash)
-axislegend(ax1; position = :rt)
-ax2 = Axis(fig[1, 2]; title = "difference of 2-D coefficients", yreversed = true, aspect = DataAspect())
-diff = dwt(img, WT_D4, 1; convention = :aligned) - dwt(img, WT_D4, 1; convention = :wavelets)
-heatmap!(ax2, logmag(diff); colormap = :magma)
+t = range(0, 1, length = n)
+s1 = [abs(x - 0.5) < 0.15 ? 1.0 : 0.0 for x in t]
+al1 = dwt(s1, WT_D4, 1; convention = :aligned)
+wv1 = dwt(s1, WT_D4, 1; convention = :wavelets)
+fig = Figure(size = (1000, 560))
+ax1 = Axis(fig[1, 1]; title = "signal", xlabel = "t", ylabel = "signal")
+lines!(ax1, collect(t), s1; color = :black, linewidth = 2)
+ax2 = Axis(fig[2, 1]; title = "level-1 detail coefficients", xlabel = "coefficient", ylabel = "coefficient")
+lines!(ax2, 1:(n ÷ 2), al1[n ÷ 2 + 1:end]; label = ":aligned", linewidth = 2)
+lines!(ax2, 1:(n ÷ 2), wv1[n ÷ 2 + 1:end]; label = ":wavelets", linewidth = 2, linestyle = :dash)
+axislegend(ax2; position = :rt)
+save(joinpath(ASSETS, "phase-1d.png"), fig)
+
+# --- phase conventions: two dimensions ------------------------------------
+al2 = dwt(img, WT_D4, 1; convention = :aligned)
+wv2 = dwt(img, WT_D4, 1; convention = :wavelets)
+fig = Figure(size = (1400, 440))
+ax1 = Axis(fig[1, 1]; title = "image", yreversed = true, aspect = DataAspect())
+heatmap!(ax1, img; colormap = [:black, :white])
+hidedecorations!(ax1); hidespines!(ax1)
+ax2 = Axis(fig[1, 2]; title = ":aligned coefficients", yreversed = true, aspect = DataAspect())
+heatmap!(ax2, logmag(al2); colormap = :viridis)
+vlines!(ax2, [size(img, 2) / 2 + 0.5]; color = (:white, 0.8))
+hlines!(ax2, [size(img, 1) / 2 + 0.5]; color = (:white, 0.8))
+text!(ax2, 64, 64; text = "identical", color = :white, align = (:center, :center))
 hidedecorations!(ax2); hidespines!(ax2)
-save(joinpath(ASSETS, "conventions.png"), fig)
+ax3 = Axis(fig[1, 3]; title = ":aligned - :wavelets", yreversed = true, aspect = DataAspect())
+heatmap!(ax3, logmag(al2 - wv2); colormap = :magma)
+text!(ax3, 64, 64; text = "zero", color = :white, align = (:center, :center))
+hidedecorations!(ax3); hidespines!(ax3)
+save(joinpath(ASSETS, "phase-2d.png"), fig)
 
 # --- filtering in the wavelet domain --------------------------------------
 function keep_bands(c, b, bands)
