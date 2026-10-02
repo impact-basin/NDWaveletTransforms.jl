@@ -10,6 +10,32 @@ This is useful for applications like sparsifying tensors, as well as the analysi
 
 The functions `dwt()`, `idwt()`, `wpt()`, and `iwpt()` are supported. The argument order is the input array, the wavelet basis, and the transform level. The `dwt!()` family mutates the input array in-place. Nonstandard transforms are prefixed with "ns", e.g. `nsdwt()` or `nsdwt!()`.
 
+## Phase conventions
+
+The transform supports two phase conventions for the wavelet (detail)
+coefficients, selected with the `convention` keyword (available on every
+transform, forward and inverse, CPU and GPU):
+
+* `convention = :aligned` (default) -- the scaling and wavelet filters act on
+  the same input window. This is the textbook phase used by e.g. PyWavelets
+  and MATLAB-style implementations.
+* `convention = :wavelets` -- reproduces the coefficient layout of
+  [Wavelets.jl](https://github.com/JuliaDSP/Wavelets.jl): the wavelet
+  filter's window starts `N-2` taps before the scaling filter's window, so
+  each detail band is the aligned one cyclically shifted by `(N-2)/2`
+  positions. For 2-tap (Haar) filters the two conventions coincide.
+
+The scaling coefficients are identical in both conventions, and both
+conventions are orthogonal (perfect-reconstruction) transforms. The
+convention is dispatched at compile time, so there is no runtime cost for
+either choice:
+
+```julia
+x = rand(128, 128)
+dwt(x, WT_D2, 2; convention = :aligned)   # textbook phase (default)
+dwt(x, WT_D2, 2; convention = :wavelets)  # matches Wavelets.jl's dwt(x, w, 2)
+```
+
 Standard forward/inverse transform:
 ```julia
 x = rand(128,128)

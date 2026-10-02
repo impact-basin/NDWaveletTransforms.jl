@@ -1,13 +1,62 @@
 # -----------------
 # FORWARD TRANSFORM
 # -----------------
+#
+# Two phase conventions are supported, dispatched on `Val{C}` (compile-time,
+# zero runtime cost):
+#
+#   :aligned   — the scaling and wavelet filters act on the same input
+#                window: a[j] = Σ φ[k] x[2j-1+k-1],
+#                        d[j] = Σ ψ[k] x[2j-1+k-1]   (mod 1 wrap-around).
+#                This is the textbook phase (e.g. PyWavelets/Matlab-style)
+#                and is the default.
+#
+#   :wavelets  — the Wavelets.jl-compatible phase: the wavelet filter's
+#                window starts N-2 taps before the scaling filter's window,
+#                        d[j] = Σ ψ[k] x[2j+k-N]     (mod 1 wrap-around).
+#                Equivalently the detail coefficients are the aligned ones
+#                cyclically rotated by (N-2)/2 positions, so the wrap-around
+#                sits at the *head* of the detail sequence instead of its
+#                tail. For 2-tap filters the two conventions coincide.
+#
+# The scaling coefficients are identical in both conventions.
+#
+# The kernels below are "strided": they take the raw data pointer and the
+# memory stride of each 1-D line, so that slices of higher-dimensional
+# arrays (rows, columns, blocks) are transformed without per-element
+# indexing overhead through the array wrapper. For arrays that do not
+# expose a pointer (non-strided AbstractArrays) a generic fallback with
+# ordinary indexing is used instead.
+
+# Extract the (pointer, stride) of a 1-D array, or `nothing` if it is not
+# strided. `Base.unsafe_convert` is defined for Array, SubArray and
+# StridedView alike.
+@inline _strided1(x::AbstractArray{T,1}) where {T} = begin
+    s = strides(x)
+    isempty(s) ? nothing : (Base.unsafe_convert(Ptr{T}, x), s[1])
+end
+
+# -----------------
+# FORWARD TRANSFORM
+# -----------------
 
 # 2-tap transform: no mod1 branching.
 @fastfun function _dwt_inner_loop!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
     b :: WTOrthogonalBasis{2, F},
+    ::Val{:aligned},
 ) :: Nothing where {T <: Number, F <: Number}
+
+    sx = _strided1(x)
+    sw = _strided1(w)
+    if sx !== nothing && sw !== nothing
+        if sx[2] == 1 && sw[2] == 1
+                                              return _dwt_inner_strided!(sx[1], sw[1], 1, 1, length(x), b, Val(:aligned), Val(true))
+                                          else
+                                              return _dwt_inner_strided!(sx[1], sw[1], sx[2], sw[2], length(x), b, Val(:aligned), Val(false))
+                                          end
+    end
 
     ls = @view w[1:end>>1]
     hs = @view w[(end>>1)+1:end]
@@ -23,12 +72,67 @@
     nothing
 end
 
+# 2-tap: both conventions coincide (the ψ window equals the φ window).
+@fastfun function _dwt_inner_loop!(
+    x :: AbstractArray{T,1},
+    w :: AbstractArray{T,1},
+    b :: WTOrthogonalBasis{2, F},
+    ::Val{:wavelets},
+) :: Nothing where {T <: Number, F <: Number}
+    _dwt_inner_loop!(x, w, b, Val(:aligned))
+    nothing
+end
+
+@fastfun function _dwt_inner_strided!(
+    px :: Ptr{T},
+    pw :: Ptr{T},
+    sx :: Int,
+    sw :: Int,
+    n :: Int,
+    b :: WTOrthogonalBasis{2, F},
+    ::Val{:aligned},
+    ::Val{UNIT},
+) :: Nothing where {T <: Number, F <: Number, UNIT}
+
+    npairs = n >> 1
+    φ = T.(b.φ)
+    ψ = T.(b.ψ)
+
+    if UNIT
+        @inbounds for (outi, sigi) in enumerate(1:2:n-1)
+            x1 = unsafe_load(px, sigi)
+            x2 = unsafe_load(px, sigi + 1)
+            @fastmath unsafe_store!(pw, φ[1] * x1 + φ[2] * x2, outi)
+            @fastmath unsafe_store!(pw, ψ[1] * x1 + ψ[2] * x2, npairs + outi)
+        end
+    else
+        @inbounds for (outi, sigi) in enumerate(1:2:n-1)
+            x1 = unsafe_load(px, (sigi - 1) * sx + 1)
+            x2 = unsafe_load(px, sigi * sx + 1)
+            @fastmath unsafe_store!(pw, φ[1] * x1 + φ[2] * x2, (outi - 1) * sw + 1)
+            @fastmath unsafe_store!(pw, ψ[1] * x1 + ψ[2] * x2, (npairs + outi - 1) * sw + 1)
+        end
+    end
+    nothing
+end
+
 # N-tap transform: mod1 branching only in the wrap-around tail.
 @fastfun function _dwt_inner_loop!(
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
     b :: WTOrthogonalBasis{N, F},
+    ::Val{:aligned},
 ) :: Nothing where {T <: Number, F <: Number, N}
+
+    sx = _strided1(x)
+    sw = _strided1(w)
+    if sx !== nothing && sw !== nothing
+        if sx[2] == 1 && sw[2] == 1
+                                              return _dwt_inner_strided!(sx[1], sw[1], 1, 1, length(x), b, Val(:aligned), Val(true))
+                                          else
+                                              return _dwt_inner_strided!(sx[1], sw[1], sx[2], sw[2], length(x), b, Val(:aligned), Val(false))
+                                          end
+    end
 
     ls = @view w[1:end>>1]
     hs = @view w[(end>>1)+1:end]
@@ -76,6 +180,304 @@ end
     nothing
 end
 
+# N-tap strided fast path. `px`/`pw` point at the first element of the
+# input/output lines and `sx`/`sw` are their memory strides.
+@fastfun function _dwt_inner_strided!(
+    px :: Ptr{T},
+    pw :: Ptr{T},
+    sx :: Int,
+    sw :: Int,
+    n :: Int,
+    b :: WTOrthogonalBasis{N, F},
+    ::Val{:aligned},
+    ::Val{UNIT},
+) :: Nothing where {T <: Number, F <: Number, N, UNIT}
+
+    npairs = n >> 1
+    φ = T.(b.φ)
+    ψ = T.(b.ψ)
+
+    nplain = max(0, (n - N + 2) >> 1)
+
+    if UNIT
+        @inbounds for outi in 1:nplain
+            sigi = 2 * outi - 1
+            sφ = zero(T)
+            sψ = zero(T)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    xv = unsafe_load(px, sigi + k - 1)
+                    sφ += φ[k] * xv
+                    sψ += ψ[k] * xv
+                end
+            else
+                @fastmath for k in 1:N
+                    xv = unsafe_load(px, sigi + k - 1)
+                    sφ += φ[k] * xv
+                    sψ += ψ[k] * xv
+                end
+            end
+            unsafe_store!(pw, sφ, outi)
+            unsafe_store!(pw, sψ, npairs + outi)
+        end
+
+        @inbounds for outi in nplain+1:npairs
+            sigi = 2 * outi - 1
+            sφ = zero(T)
+            sψ = zero(T)
+            @fastmath for k in 1:N
+                xv = unsafe_load(px, mod1(sigi + k - 1, n))
+                sφ += φ[k] * xv
+                sψ += ψ[k] * xv
+            end
+            unsafe_store!(pw, sφ, outi)
+            unsafe_store!(pw, sψ, npairs + outi)
+        end
+    else
+        @inbounds for outi in 1:nplain
+            sigi = 2 * outi - 1
+            sφ = zero(T)
+            sψ = zero(T)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    xv = unsafe_load(px, (sigi + k - 2) * sx + 1)
+                    sφ += φ[k] * xv
+                    sψ += ψ[k] * xv
+                end
+            else
+                @fastmath for k in 1:N
+                    xv = unsafe_load(px, (sigi + k - 2) * sx + 1)
+                    sφ += φ[k] * xv
+                    sψ += ψ[k] * xv
+                end
+            end
+            unsafe_store!(pw, sφ, (outi - 1) * sw + 1)
+            unsafe_store!(pw, sψ, (npairs + outi - 1) * sw + 1)
+        end
+
+        @inbounds for outi in nplain+1:npairs
+            sigi = 2 * outi - 1
+            sφ = zero(T)
+            sψ = zero(T)
+            @fastmath for k in 1:N
+                xv = unsafe_load(px, (mod1(sigi + k - 1, n) - 1) * sx + 1)
+                sφ += φ[k] * xv
+                sψ += ψ[k] * xv
+            end
+            unsafe_store!(pw, sφ, (outi - 1) * sw + 1)
+            unsafe_store!(pw, sψ, (npairs + outi - 1) * sw + 1)
+        end
+    end
+    nothing
+end
+
+# N-tap transform, Wavelets.jl-compatible phase: the wavelet filter's
+# window starts N-2 taps before the scaling filter's window, so the
+# wrap-around sits at the head of the detail sequence (first nwrap outputs)
+# instead of its tail. The scaling coefficients are unchanged.
+@fastfun function _dwt_inner_loop!(
+    x :: AbstractArray{T,1},
+    w :: AbstractArray{T,1},
+    b :: WTOrthogonalBasis{N, F},
+    ::Val{:wavelets},
+) :: Nothing where {T <: Number, F <: Number, N}
+
+    sx = _strided1(x)
+    sw = _strided1(w)
+    if sx !== nothing && sw !== nothing
+        if sx[2] == 1 && sw[2] == 1
+                                              return _dwt_inner_strided!(sx[1], sw[1], 1, 1, length(x), b, Val(:wavelets), Val(true))
+                                          else
+                                              return _dwt_inner_strided!(sx[1], sw[1], sx[2], sw[2], length(x), b, Val(:wavelets), Val(false))
+                                          end
+    end
+
+    ls = @view w[1:end>>1]
+    hs = @view w[(end>>1)+1:end]
+    n = length(x)
+    φ = T.(b.φ)
+    ψ = T.(b.ψ)
+
+    # scaling coefficients: aligned window [2outi-1, 2outi+N-2], tail wraps.
+    nplain = max(0, (n - N + 2) >> 1)
+
+    @inbounds for outi in 1:nplain
+        sigi = 2 * outi - 1
+        sφ = zero(T)
+        if N <= 8
+            @fastmath @simd for k in 1:N
+                sφ += φ[k] * x[sigi + k - 1]
+            end
+        else
+            @fastmath for k in 1:N
+                sφ += φ[k] * x[sigi + k - 1]
+            end
+        end
+        ls[outi] = sφ
+    end
+
+    @inbounds for outi in nplain+1:n>>1
+        sigi = 2 * outi - 1
+        sφ = zero(T)
+        @fastmath for k in 1:N
+            sφ += φ[k] * x[mod1(sigi + k - 1, n)]
+        end
+        ls[outi] = sφ
+    end
+
+    # wavelet coefficients: window [2outi-N+1, 2outi], head wraps.
+    nwrap = (N - 1) >> 1
+
+    @inbounds for outi in nwrap+1:n>>1
+        sigi = 2 * outi - N + 1
+        sψ = zero(T)
+        if N <= 8
+            @fastmath @simd for k in 1:N
+                sψ += ψ[k] * x[sigi + k - 1]
+            end
+        else
+            @fastmath for k in 1:N
+                sψ += ψ[k] * x[sigi + k - 1]
+            end
+        end
+        hs[outi] = sψ
+    end
+
+    @inbounds for outi in 1:min(nwrap, n>>1)
+        sigi = 2 * outi - N + 1
+        sψ = zero(T)
+        @fastmath for k in 1:N
+            sψ += ψ[k] * x[mod1(sigi + k - 1, n)]
+        end
+        hs[outi] = sψ
+    end
+    nothing
+end
+
+@fastfun function _dwt_inner_strided!(
+    px :: Ptr{T},
+    pw :: Ptr{T},
+    sx :: Int,
+    sw :: Int,
+    n :: Int,
+    b :: WTOrthogonalBasis{N, F},
+    ::Val{:wavelets},
+    ::Val{UNIT},
+) :: Nothing where {T <: Number, F <: Number, N, UNIT}
+
+    npairs = n >> 1
+    φ = T.(b.φ)
+    ψ = T.(b.ψ)
+
+    # scaling coefficients: aligned window [2outi-1, 2outi+N-2], tail wraps.
+    nplain = max(0, (n - N + 2) >> 1)
+
+    if UNIT
+        @inbounds for outi in 1:nplain
+            sigi = 2 * outi - 1
+            sφ = zero(T)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    sφ += φ[k] * unsafe_load(px, sigi + k - 1)
+                end
+            else
+                @fastmath for k in 1:N
+                    sφ += φ[k] * unsafe_load(px, sigi + k - 1)
+                end
+            end
+            unsafe_store!(pw, sφ, outi)
+        end
+
+        @inbounds for outi in nplain+1:npairs
+            sigi = 2 * outi - 1
+            sφ = zero(T)
+            @fastmath for k in 1:N
+                sφ += φ[k] * unsafe_load(px, mod1(sigi + k - 1, n))
+            end
+            unsafe_store!(pw, sφ, outi)
+        end
+
+        # wavelet coefficients: window [2outi-N+1, 2outi], head wraps.
+        nwrap = (N - 1) >> 1
+
+        @inbounds for outi in nwrap+1:npairs
+            sigi = 2 * outi - N + 1
+            sψ = zero(T)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    sψ += ψ[k] * unsafe_load(px, sigi + k - 1)
+                end
+            else
+                @fastmath for k in 1:N
+                    sψ += ψ[k] * unsafe_load(px, sigi + k - 1)
+                end
+            end
+            unsafe_store!(pw, sψ, npairs + outi)
+        end
+
+        @inbounds for outi in 1:min(nwrap, npairs)
+            sigi = 2 * outi - N + 1
+            sψ = zero(T)
+            @fastmath for k in 1:N
+                sψ += ψ[k] * unsafe_load(px, mod1(sigi + k - 1, n))
+            end
+            unsafe_store!(pw, sψ, npairs + outi)
+        end
+    else
+        @inbounds for outi in 1:nplain
+            sigi = 2 * outi - 1
+            sφ = zero(T)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    sφ += φ[k] * unsafe_load(px, (sigi + k - 2) * sx + 1)
+                end
+            else
+                @fastmath for k in 1:N
+                    sφ += φ[k] * unsafe_load(px, (sigi + k - 2) * sx + 1)
+                end
+            end
+            unsafe_store!(pw, sφ, (outi - 1) * sw + 1)
+        end
+
+        @inbounds for outi in nplain+1:npairs
+            sigi = 2 * outi - 1
+            sφ = zero(T)
+            @fastmath for k in 1:N
+                sφ += φ[k] * unsafe_load(px, (mod1(sigi + k - 1, n) - 1) * sx + 1)
+            end
+            unsafe_store!(pw, sφ, (outi - 1) * sw + 1)
+        end
+
+        # wavelet coefficients: window [2outi-N+1, 2outi], head wraps.
+        nwrap = (N - 1) >> 1
+
+        @inbounds for outi in nwrap+1:npairs
+            sigi = 2 * outi - N + 1
+            sψ = zero(T)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    sψ += ψ[k] * unsafe_load(px, (sigi + k - 2) * sx + 1)
+                end
+            else
+                @fastmath for k in 1:N
+                    sψ += ψ[k] * unsafe_load(px, (sigi + k - 2) * sx + 1)
+                end
+            end
+            unsafe_store!(pw, sψ, (npairs + outi - 1) * sw + 1)
+        end
+
+        @inbounds for outi in 1:min(nwrap, npairs)
+            sigi = 2 * outi - N + 1
+            sψ = zero(T)
+            @fastmath for k in 1:N
+                sψ += ψ[k] * unsafe_load(px, (mod1(sigi + k - 1, n) - 1) * sx + 1)
+            end
+            unsafe_store!(pw, sψ, (npairs + outi - 1) * sw + 1)
+        end
+    end
+    nothing
+end
+
 # -----------------
 # INVERSE TRANSFORM
 # -----------------
@@ -84,9 +486,22 @@ end
 @fastfun function _idwt_inner_loop!(
     l :: AbstractArray{T, 1},
     h :: AbstractArray{T, 1},
-    w :: AbstractArray{T,1},
+    w :: AbstractArray{T, 1},
     b :: WTOrthogonalBasis{2, F},
+    ::Val{:aligned},
 ) :: Nothing where {T <: Number, F <: Number}
+
+    pl = _strided1(l)
+    ph = _strided1(h)
+    pw = _strided1(w)
+    if pl !== nothing && ph !== nothing && pw !== nothing
+        if pl[2] == 1 && ph[2] == 1 && pw[2] == 1
+                                              return _idwt_inner_strided!(pl[1], ph[1], pw[1], 1, 1, 1, length(w), b, Val(:aligned), Val(true))
+                                          else
+                                              return _idwt_inner_strided!(pl[1], ph[1], pw[1], pl[2], ph[2], pw[2], length(w), b, Val(:aligned), Val(false))
+                                          end
+    end
+
     φ = T.(b.φ)
     ψ = T.(b.ψ)
     @inbounds for (i, j) in enumerate(1:2:length(l)+length(h)-1)
@@ -98,12 +513,72 @@ end
     nothing
 end
 
+# 2-tap: both conventions coincide.
+@fastfun function _idwt_inner_loop!(
+    l :: AbstractArray{T, 1},
+    h :: AbstractArray{T, 1},
+    w :: AbstractArray{T, 1},
+    b :: WTOrthogonalBasis{2, F},
+    ::Val{:wavelets},
+) :: Nothing where {T <: Number, F <: Number}
+    _idwt_inner_loop!(l, h, w, b, Val(:aligned))
+    nothing
+end
+
+@fastfun function _idwt_inner_strided!(
+    pl :: Ptr{T},
+    ph :: Ptr{T},
+    pw :: Ptr{T},
+    sl :: Int,
+    sh :: Int,
+    sw :: Int,
+    nw :: Int,
+    b :: WTOrthogonalBasis{2, F},
+    ::Val{:aligned},
+    ::Val{UNIT},
+) :: Nothing where {T <: Number, F <: Number, UNIT}
+    m = nw >> 1
+    φ = T.(b.φ)
+    ψ = T.(b.ψ)
+    if UNIT
+        @inbounds for i in 1:m
+            li = unsafe_load(pl, i)
+            hi = unsafe_load(ph, i)
+            j = 2 * i - 1
+            @fastmath unsafe_store!(pw, unsafe_load(pw, j) + li * φ[1] + hi * ψ[1], j)
+            @fastmath unsafe_store!(pw, unsafe_load(pw, j + 1) + li * φ[2] + hi * ψ[2], j + 1)
+        end
+    else
+        @inbounds for i in 1:m
+            li = unsafe_load(pl, (i - 1) * sl + 1)
+            hi = unsafe_load(ph, (i - 1) * sh + 1)
+            j = 2 * i - 1
+            @fastmath unsafe_store!(pw, unsafe_load(pw, (j - 1) * sw + 1) + li * φ[1] + hi * ψ[1], (j - 1) * sw + 1)
+            @fastmath unsafe_store!(pw, unsafe_load(pw, j * sw + 1) + li * φ[2] + hi * ψ[2], j * sw + 1)
+        end
+    end
+    nothing
+end
+
 @fastfun function _idwt_inner_loop!(
     l :: AbstractArray{T, 1},
     h :: AbstractArray{T, 1},
     w :: AbstractArray{T, 1},
     b :: WTOrthogonalBasis{N, F},
+    ::Val{:aligned},
 ) :: Nothing where {T <: Number, N, F <: Number}
+
+    pl = _strided1(l)
+    ph = _strided1(h)
+    pw = _strided1(w)
+    if pl !== nothing && ph !== nothing && pw !== nothing
+        if pl[2] == 1 && ph[2] == 1 && pw[2] == 1
+                                              return _idwt_inner_strided!(pl[1], ph[1], pw[1], 1, 1, 1, length(w), b, Val(:aligned), Val(true))
+                                          else
+                                              return _idwt_inner_strided!(pl[1], ph[1], pw[1], pl[2], ph[2], pw[2], length(w), b, Val(:aligned), Val(false))
+                                          end
+    end
+
     nw = length(w)
     m = length(l)
     φ = T.(b.φ)
@@ -138,18 +613,300 @@ end
     nothing
 end
 
-# Single-level write-through passes used by the N-D drivers: the transform
-# writes into the second buffer without copying back, and the driver tracks
-# which buffer holds the data.
-@fastfun function _dwt_level1!(x, w, b)
-    _dwt_inner_loop!(x, w, b)
+@fastfun function _idwt_inner_strided!(
+    pl :: Ptr{T},
+    ph :: Ptr{T},
+    pw :: Ptr{T},
+    sl :: Int,
+    sh :: Int,
+    sw :: Int,
+    nw :: Int,
+    b :: WTOrthogonalBasis{N, F},
+    ::Val{:aligned},
+    ::Val{UNIT},
+) :: Nothing where {T <: Number, N, F <: Number, UNIT}
+    m = nw >> 1
+    φ = T.(b.φ)
+    ψ = T.(b.ψ)
+
+    # Window [j, j+N-1] wraps only when j > nw-N+1
+    nplain = max(0, (nw - N + 2) >> 1)
+
+    if UNIT
+        @inbounds for i in 1:min(m, nplain)
+            j = 2 * i - 1
+            li = unsafe_load(pl, i)
+            hi = unsafe_load(ph, i)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    off = j + k - 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k] + hi * ψ[k], off)
+                end
+            else
+                @fastmath for k in 1:N
+                    off = j + k - 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k] + hi * ψ[k], off)
+                end
+            end
+        end
+
+        @inbounds for i in min(m, nplain)+1:m
+            j = 2 * i - 1
+            li = unsafe_load(pl, i)
+            hi = unsafe_load(ph, i)
+            @fastmath for k in 1:N
+                off = mod1(j + k - 1, nw)
+                unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k] + hi * ψ[k], off)
+            end
+        end
+    else
+        @inbounds for i in 1:min(m, nplain)
+            j = 2 * i - 1
+            li = unsafe_load(pl, (i - 1) * sl + 1)
+            hi = unsafe_load(ph, (i - 1) * sh + 1)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    off = (j + k - 2) * sw + 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k] + hi * ψ[k], off)
+                end
+            else
+                @fastmath for k in 1:N
+                    off = (j + k - 2) * sw + 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k] + hi * ψ[k], off)
+                end
+            end
+        end
+
+        @inbounds for i in min(m, nplain)+1:m
+            j = 2 * i - 1
+            li = unsafe_load(pl, (i - 1) * sl + 1)
+            hi = unsafe_load(ph, (i - 1) * sh + 1)
+            @fastmath for k in 1:N
+                off = (mod1(j + k - 1, nw) - 1) * sw + 1
+                unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k] + hi * ψ[k], off)
+            end
+        end
+    end
     nothing
 end
 
-@fastfun function _idwt_level1!(x, w, b)
+# Wavelets.jl-compatible phase: the scaling coefficients feed the aligned
+# window [2i-1, 2i+N-2] (tail wraps) while the wavelet coefficients feed the
+# window [2i-N+1, 2i] (head wraps). The two passes accumulate into the same
+# (pre-zeroed) output, so their order does not matter.
+@fastfun function _idwt_inner_loop!(
+    l :: AbstractArray{T, 1},
+    h :: AbstractArray{T, 1},
+    w :: AbstractArray{T, 1},
+    b :: WTOrthogonalBasis{N, F},
+    ::Val{:wavelets},
+) :: Nothing where {T <: Number, N, F <: Number}
+
+    pl = _strided1(l)
+    ph = _strided1(h)
+    pw = _strided1(w)
+    if pl !== nothing && ph !== nothing && pw !== nothing
+        if pl[2] == 1 && ph[2] == 1 && pw[2] == 1
+                                              return _idwt_inner_strided!(pl[1], ph[1], pw[1], 1, 1, 1, length(w), b, Val(:wavelets), Val(true))
+                                          else
+                                              return _idwt_inner_strided!(pl[1], ph[1], pw[1], pl[2], ph[2], pw[2], length(w), b, Val(:wavelets), Val(false))
+                                          end
+    end
+
+    nw = length(w)
+    m = length(l)
+    φ = T.(b.φ)
+    ψ = T.(b.ψ)
+
+    # scaling pass: window [2i-1, 2i+N-2], tail wraps.
+    nplain = max(0, (nw - N + 2) >> 1)
+
+    @inbounds for i in 1:min(m, nplain)
+        j = 2 * i - 1
+        li = l[i]
+        if N <= 8
+            @fastmath @views w[j:j+N-1] .+= li .* φ
+        else
+            @fastmath @simd for k in 1:N
+                w[j + k - 1] += li * φ[k]
+            end
+        end
+    end
+
+    @inbounds for i in min(m, nplain)+1:m
+        j = 2 * i - 1
+        li = l[i]
+        @fastmath for k in 1:N
+            w[mod1(j + k - 1, nw)] += li * φ[k]
+        end
+    end
+
+    # wavelet pass: window [2i-N+1, 2i], head wraps.
+    nwrap = (N - 1) >> 1
+
+    @inbounds for i in nwrap+1:m
+        j = 2 * i - N + 1
+        hi = h[i]
+        if N <= 8
+            @fastmath @views w[j:j+N-1] .+= hi .* ψ
+        else
+            @fastmath @simd for k in 1:N
+                w[j + k - 1] += hi * ψ[k]
+            end
+        end
+    end
+
+    @inbounds for i in 1:min(m, nwrap)
+        j = 2 * i - N + 1
+        hi = h[i]
+        @fastmath for k in 1:N
+            w[mod1(j + k - 1, nw)] += hi * ψ[k]
+        end
+    end
+    nothing
+end
+
+@fastfun function _idwt_inner_strided!(
+    pl :: Ptr{T},
+    ph :: Ptr{T},
+    pw :: Ptr{T},
+    sl :: Int,
+    sh :: Int,
+    sw :: Int,
+    nw :: Int,
+    b :: WTOrthogonalBasis{N, F},
+    ::Val{:wavelets},
+    ::Val{UNIT},
+) :: Nothing where {T <: Number, N, F <: Number, UNIT}
+    m = nw >> 1
+    φ = T.(b.φ)
+    ψ = T.(b.ψ)
+
+    # scaling pass: window [2i-1, 2i+N-2], tail wraps.
+    nplain = max(0, (nw - N + 2) >> 1)
+
+    if UNIT
+        @inbounds for i in 1:min(m, nplain)
+            j = 2 * i - 1
+            li = unsafe_load(pl, i)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    off = j + k - 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k], off)
+                end
+            else
+                @fastmath for k in 1:N
+                    off = j + k - 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k], off)
+                end
+            end
+        end
+
+        @inbounds for i in min(m, nplain)+1:m
+            j = 2 * i - 1
+            li = unsafe_load(pl, i)
+            @fastmath for k in 1:N
+                off = mod1(j + k - 1, nw)
+                unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k], off)
+            end
+        end
+
+        # wavelet pass: window [2i-N+1, 2i], head wraps.
+        nwrap = (N - 1) >> 1
+
+        @inbounds for i in nwrap+1:m
+            j = 2 * i - N + 1
+            hi = unsafe_load(ph, i)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    off = j + k - 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + hi * ψ[k], off)
+                end
+            else
+                @fastmath for k in 1:N
+                    off = j + k - 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + hi * ψ[k], off)
+                end
+            end
+        end
+
+        @inbounds for i in 1:min(m, nwrap)
+            j = 2 * i - N + 1
+            hi = unsafe_load(ph, i)
+            @fastmath for k in 1:N
+                off = mod1(j + k - 1, nw)
+                unsafe_store!(pw, unsafe_load(pw, off) + hi * ψ[k], off)
+            end
+        end
+    else
+        @inbounds for i in 1:min(m, nplain)
+            j = 2 * i - 1
+            li = unsafe_load(pl, (i - 1) * sl + 1)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    off = (j + k - 2) * sw + 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k], off)
+                end
+            else
+                @fastmath for k in 1:N
+                    off = (j + k - 2) * sw + 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k], off)
+                end
+            end
+        end
+
+        @inbounds for i in min(m, nplain)+1:m
+            j = 2 * i - 1
+            li = unsafe_load(pl, (i - 1) * sl + 1)
+            @fastmath for k in 1:N
+                off = (mod1(j + k - 1, nw) - 1) * sw + 1
+                unsafe_store!(pw, unsafe_load(pw, off) + li * φ[k], off)
+            end
+        end
+
+        # wavelet pass: window [2i-N+1, 2i], head wraps.
+        nwrap = (N - 1) >> 1
+
+        @inbounds for i in nwrap+1:m
+            j = 2 * i - N + 1
+            hi = unsafe_load(ph, (i - 1) * sh + 1)
+            if N <= 8
+                @fastmath @simd for k in 1:N
+                    off = (j + k - 2) * sw + 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + hi * ψ[k], off)
+                end
+            else
+                @fastmath for k in 1:N
+                    off = (j + k - 2) * sw + 1
+                    unsafe_store!(pw, unsafe_load(pw, off) + hi * ψ[k], off)
+                end
+            end
+        end
+
+        @inbounds for i in 1:min(m, nwrap)
+            j = 2 * i - N + 1
+            hi = unsafe_load(ph, (i - 1) * sh + 1)
+            @fastmath for k in 1:N
+                off = (mod1(j + k - 1, nw) - 1) * sw + 1
+                unsafe_store!(pw, unsafe_load(pw, off) + hi * ψ[k], off)
+            end
+        end
+    end
+    nothing
+end
+
+# Single-level write-through passes used by the N-D drivers: the transform
+# writes into the second buffer without copying back, and the driver tracks
+# which buffer holds the data.
+@fastfun function _dwt_level1!(x, w, b, ::Val{C}) where {C}
+    _dwt_inner_loop!(x, w, b, Val{C}())
+    nothing
+end
+
+@fastfun function _idwt_level1!(x, w, b, ::Val{C}) where {C}
     m = length(x) >> 1
     fill!(w, zero(eltype(w)))
-    _idwt_inner_loop!(view(x, 1:m), view(x, m+1:length(x)), w, b)
+    _idwt_inner_loop!(view(x, 1:m), view(x, m+1:length(x)), w, b, Val{C}())
     nothing
 end
 
@@ -158,9 +915,10 @@ end
     x :: AbstractArray{T,1},
     w :: AbstractArray{T,1},
     b :: WTOrthogonalBasis,
-    level=1;
+    level=1,
+    ::Val{C}=Val(:aligned);
     wpt=false
-) :: AbstractArray{T,1} where T <: Number
+) :: AbstractArray{T,1} where {T <: Number, C}
 
     level <= 0 && return x
     n = length(x)
@@ -177,6 +935,7 @@ end
                 view(src, r0:r0+bsize-1),
                 view(dst, r0:r0+bsize-1),
                 b,
+                Val{C}(),
             )
         end
         src, dst = dst, src
@@ -201,9 +960,10 @@ end
     x :: AbstractArray{T, 1},
     w :: AbstractArray{T, 1},
     b :: WTOrthogonalBasis,
-    level=1;
+    level=1,
+    ::Val{C}=Val(:aligned);
     wpt=false
-) :: AbstractArray{T,1} where T <: Number
+) :: AbstractArray{T,1} where {T <: Number, C}
 
     level <= 0 && return x
     n = length(x)
@@ -230,7 +990,7 @@ end
             end
             dv = view(dst, b0:b0+bsize-1)
             fill!(dv, zt)
-            _idwt_inner_loop!(lv, hv, dv, b)
+            _idwt_inner_loop!(lv, hv, dv, b, Val{C}())
         end
         src, dst = dst, src
         nreal += 1
