@@ -42,9 +42,10 @@ WTOrthogonalBasis
 complement
 ```
 
-## Utilities
+## Cascade and spin utilities
 
 ```@docs
+cascade
 cyclespin!
 cyclespinning!
 ```

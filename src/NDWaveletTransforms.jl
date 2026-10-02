@@ -46,6 +46,9 @@ export WT_BL7,     WT_BL9,     WT_BL10
 export WT_BEYL
 export WT_VAID
 
+include("cascade.jl")
+export cascade
+
 include("subbands.jl")
 export rtree_views
 export rtree_view

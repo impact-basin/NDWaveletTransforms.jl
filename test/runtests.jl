@@ -544,6 +544,24 @@ end
     @test complement(SVector{2, Float64}(1, -1)) == SVector{2, Float64}(1, 1)
 end
 
+@testset "cascade algorithm" begin
+    φ, ψ = cascade(WT_HAAR, 4)
+    @test length(φ) == length(ψ) == 31
+    @test all(φ[1:16] .== 1)
+    @test all(φ[17:31] .== 0)
+    @test sum(φ) / 2^4 ≈ 1
+
+    φ4, ψ4 = cascade(WT_D2, 8)
+    @test sum(φ4) / 2^8 ≈ 1
+    @test sum(ψ4) ≈ 0 atol = 1e-8
+
+    s3 = (1 + sqrt(3)) / 2
+    φ16, _ = cascade(WT_D2, 16)
+    @test [φ16[1 + k * 2^16] for k in 0:3] ≈ [0, s3, 1 - s3, 0] atol = 1e-2
+
+    @test_throws ArgumentError cascade(WT_HAAR, 0)
+end
+
 @testset "Aqua" begin
     Aqua.test_stale_deps(NDWaveletTransforms)
     Aqua.test_deps_compat(NDWaveletTransforms)

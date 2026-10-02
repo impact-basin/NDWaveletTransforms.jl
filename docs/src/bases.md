@@ -1,7 +1,9 @@
 # Bases
 
 Every basis is orthogonal and represented by a `WTOrthogonalBasis`, a pair
-of equal-length `SVector`s: a scaling filter φ and a wavelet filter ψ.
+of equal-length `SVector`s: a scaling filter φ and a wavelet filter ψ. The
+name carries the vanishing-moment count, so `WT_DN` has `N` vanishing
+moments and `2N` taps; `WT_D4` is the eight-tap filter.
 
 | Kind | Symbols |
 |---|---|
@@ -17,19 +19,34 @@ of equal-length `SVector`s: a scaling filter φ and a wavelet filter ψ.
 | Best-localised Daubechies | `WT_BL7`, `WT_BL9`, `WT_BL10` |
 | Han | `WT_HAN23`, `WT_HAN33`, `WT_HAN45`, `WT_HAN55` |
 
+## The functions behind the filters
+
+The filters generate a scaling function φ and a wavelet function ψ through
+the refinement equation. [`cascade`](@ref) samples both.
+
+```julia
+φ, ψ = cascade(WT_D4, 8)
+```
+
+![The scaling function φ and the wavelet function ψ of four bases.](assets/bases-functions.png)
+
+Haar's φ is a box and its ψ a square wave. Longer filters give smoother
+functions with wider support: `WT_D8` lives on `[0, 15]` against Haar's
+`[0, 1]`. That is the trade-off behind the choice below.
+
 ## Choosing a basis
 
-Shorter filters localise better in space, longer filters in frequency.
-The first figure sorts the coefficients of a four-level transform by
-magnitude. Haar decays slowest and its 5% reconstruction is visibly
-stair-stepped; Sym4 is smoother and keeps more of the signal. D4 and D8 sit
-between them, and are the usual working choices.
+Shorter filters localise better in space, longer filters in frequency. The
+next figure sorts the coefficients of a four-level transform by magnitude.
+Haar decays slowest and its 5% reconstruction is visibly stair-stepped;
+Sym4 is smoother and keeps more of the signal. D4 and D8 sit between them,
+and are the usual working choices.
 
 ![Coefficient decay and a 5% reconstruction for several bases.](assets/bases.png)
 
-The second figure shows the same image transformed with three bases. The
-coefficient arrays look alike, but Haar puts less energy in the coarse band
-and more in the details, which is why it compresses smooth images worse.
+The same image transformed with three bases shows little difference in
+layout, but Haar puts less energy in the coarse band and more in the
+details, which is why it compresses smooth images worse.
 
 ![The two-level coefficients of one image for three bases.](assets/bases-image.png)
 

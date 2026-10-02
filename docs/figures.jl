@@ -187,6 +187,30 @@ for (i, (name, b)) in enumerate((("Haar", WT_HAAR), ("D4", WT_D4), ("Sym4", WT_S
 end
 save(joinpath(ASSETS, "bases-image.png"), fig)
 
+# --- scaling and wavelet functions ----------------------------------------
+bases = (("WT_HAAR", WT_HAAR), ("WT_D4", WT_D4), ("WT_SYM4", WT_SYM4), ("WT_D8", WT_D8))
+fig = Figure(size = (1300, 600))
+for (i, (name, b)) in enumerate(bases)
+    φ, ψ = cascade(b, 8)
+    tt = (0:length(φ) - 1) ./ 2^8
+    axp = Axis(fig[1, i]; title = name, xlabel = "t", ylabel = i == 1 ? "φ" : "")
+    lines!(axp, tt, φ; linewidth = 2)
+    axq = Axis(fig[2, i]; xlabel = "t", ylabel = i == 1 ? "ψ" : "")
+    lines!(axq, tt, ψ; linewidth = 2, color = :red)
+end
+save(joinpath(ASSETS, "bases-functions.png"), fig)
+
+# --- cascade convergence --------------------------------------------------
+fig = Figure(size = (1000, 620))
+for (i, it) in enumerate((1, 2, 3, 4, 6, 8))
+    φ, _ = cascade(WT_D4, it)
+    tt = (0:length(φ) - 1) ./ 2^it
+    axc = Axis(fig[div(i - 1, 3) + 1, mod(i - 1, 3) + 1]; title = "n = $it", xlabel = "t")
+    ylims!(axc, -0.4, 1.5)
+    lines!(axc, tt, φ; linewidth = 2)
+end
+save(joinpath(ASSETS, "cascade-convergence.png"), fig)
+
 # --- cycle spinning -------------------------------------------------------
 function denoise!(x)
     dwt!(x, WT_D4, 4)
