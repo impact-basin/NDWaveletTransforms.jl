@@ -215,6 +215,27 @@ for (i, it) in enumerate((1, 2, 3, 4, 6, 8))
 end
 save(joinpath(ASSETS, "cascade-convergence.png"), fig)
 
+# --- phase convention and the wavelet function ----------------------------
+φc, ψc = cascade(WT_D4, 8)
+ntaps = length(WT_D4.φ)
+δ = (ntaps - 2) / 2                    # coefficient positions, (ntaps - 2) / 2
+uu = (0:length(φc) - 1) ./ 2^9          # coefficient positions (half the sample grid)
+fig = Figure(size = (1100, 800))
+axf = Axis(fig[1, 1]; title = "scaling function φ (identical in both)", xlabel = "coefficient position")
+lines!(axf, uu, φc; linewidth = 2)
+axg = Axis(fig[1, 2]; title = "wavelet function ψ", xlabel = "coefficient position")
+lines!(axg, uu, ψc; linewidth = 3, label = ":aligned")
+lines!(axg, uu .+ δ, ψc; linewidth = 1.5, linestyle = :dash, label = ":wavelets")
+axislegend(axg; position = :rt)
+axh = Axis(fig[2, 1:2]; title = "detail coefficients of an impulse", xlabel = "coefficient index")
+xd = zeros(256); xd[128] = 1.0
+al = dwt(xd, WT_D4, 1; convention = :aligned)[129:end]
+wv = dwt(xd, WT_D4, 1; convention = :wavelets)[129:end]
+lines!(axh, 1:length(al), al; linewidth = 2, label = ":aligned")
+lines!(axh, 1:length(wv), wv; linewidth = 2, linestyle = :dash, label = ":wavelets")
+axislegend(axh; position = :rt)
+save(joinpath(ASSETS, "phase-wavelets.png"), fig)
+
 # --- cycle spinning -------------------------------------------------------
 function denoise!(x)
     dwt!(x, WT_D4, 4)
