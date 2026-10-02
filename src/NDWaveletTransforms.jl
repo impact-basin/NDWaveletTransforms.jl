@@ -10,6 +10,7 @@ using StyledStrings
 using StaticArrays
 using Primes
 using LinearAlgebra
+using Statistics
 using Base.Threads
 using MacroTools: @capture, postwalk, prewalk
 using MacroTools: splitdef, splitarg, rmlines
@@ -67,6 +68,15 @@ export wpt!
 export wpt
 export iwpt!
 export iwpt
+
+include("processing.jl")
+export threshold!
+export keeplargest!
+export noisiness
+export rtenergy
+export sparsity
+export denoise
+export compress
 
 include("ns-dwt.jl")
 export nsdwt!

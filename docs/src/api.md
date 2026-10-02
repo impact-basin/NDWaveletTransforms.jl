@@ -42,6 +42,18 @@ WTOrthogonalBasis
 complement
 ```
 
+## Coefficient processing
+
+```@docs
+threshold!
+keeplargest!
+noisiness
+rtenergy
+sparsity
+denoise
+compress
+```
+
 ## Cascade and spin utilities
 
 ```@docs

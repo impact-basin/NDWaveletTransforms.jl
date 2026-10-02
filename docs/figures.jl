@@ -236,6 +236,21 @@ lines!(axh, 1:length(wv), wv; linewidth = 2, linestyle = :dash, label = ":wavele
 axislegend(axh; position = :rt)
 save(joinpath(ASSETS, "phase-wavelets.png"), fig)
 
+# --- denoising ------------------------------------------------------------
+Random.seed!(1)
+n = 512
+t = range(0, 1, length = n)
+clean = sin.(2pi .* 4 .* t) .+ 0.4 .* sin.(2pi .* 12 .* t)
+noisy = clean .+ 0.25 .* randn(n)
+fig = Figure(size = (900, 520))
+ax = Axis(fig[1, 1]; title = "wavelet denoising", xlabel = "t", ylabel = "signal")
+lines!(ax, collect(t), noisy; color = (:gray, 0.35), label = "noisy")
+lines!(ax, collect(t), clean; color = :black, linewidth = 2, label = "clean")
+lines!(ax, collect(t), denoise(noisy, WT_D4, 4); color = :red, label = "denoise")
+lines!(ax, collect(t), denoise(noisy, WT_D4, 4; cycles = 8); color = :blue, label = "with cycle spinning")
+axislegend(ax; position = :rb, nbanks = 2)
+save(joinpath(ASSETS, "denoise.png"), fig)
+
 # --- cycle spinning -------------------------------------------------------
 function denoise!(x)
     dwt!(x, WT_D4, 4)

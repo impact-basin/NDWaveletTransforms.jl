@@ -12,16 +12,26 @@ front. A matrix shifts both axes by the same amount.
 """
     cyclespinning!(f, x, n = 4; start = 16)
 
-Apply `f` to `x` under `n` successive circular shifts, undoing each shift
-afterwards. The shifts are the primes `prime(start + 1)` upward. Spin
-cycling averages out edge artefacts when `f` is a transform or a denoiser.
+Average `f` over `n` circular shifts of `x`, in place, and return `x`. Each
+shift is undone before the results are averaged, so `f` always sees a shifted
+copy of the original: this is the Coifman-Donoho cycle-spinning estimator.
+The shifts are the primes `prime(start + 1)` upward. Averaging cancels the
+edge artefacts that the periodic transform leaves behind, at a cost linear in
+`n`.
 """
 @fastfun function cyclespinning!(f, x, n=4; start=16)
-    for p in (prime(i + start) for i=1:n)
-        cyclespin!(x, p)
+    n >= 1 || throw(ArgumentError("n must be at least 1"))
+    original = copy(x)
+    acc = similar(x)
+    for i in 1:n
+        copyto!(x, original)
+        cyclespin!(x, prime(i + start))
         f(x)
-        cyclespin!(x, -p)
+        cyclespin!(x, -prime(i + start))
+        i == 1 ? copyto!(acc, x) : (acc .+= x)
     end
+    x .= acc ./ n
+    return x
 end
 
 """

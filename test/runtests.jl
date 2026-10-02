@@ -1,5 +1,6 @@
 using Test
 using Random
+using LinearAlgebra
 using StaticArrays
 using NDWaveletTransforms
 import Wavelets as W
@@ -539,9 +540,52 @@ end
         v .+= 1
     end
     @test calls[] == 3
-    @test w == before .+ 3
+    @test w ≈ before .+ 1
 
     @test complement(SVector{2, Float64}(1, -1)) == SVector{2, Float64}(1, 1)
+end
+
+@testset "coefficient processing" begin
+    x = [-2.0, -0.5, 0.0, 0.5, 2.0]
+    @test threshold!(copy(x), 1.0; mode = :hard) == [-2.0, 0.0, 0.0, 0.0, 2.0]
+    @test threshold!(copy(x), 1.0; mode = :soft) == [-1.0, 0.0, 0.0, 0.0, 1.0]
+    @test threshold!(copy(x), 1.0; mode = :garrote) ≈ [-1.5, 0.0, 0.0, 0.0, 1.5]
+    @test_throws ArgumentError threshold!(copy(x), 1.0; mode = :nope)
+
+    y = [1.0, -5.0, 3.0, -2.0, 4.0]
+    keeplargest!(y, 2)
+    @test y == [0.0, -5.0, 0.0, 0.0, 4.0]
+    @test count(!iszero, keeplargest!([1.0, 2.0], 0)) == 0
+    @test keeplargest!([1.0, 2.0], 5) == [1.0, 2.0]
+    z = collect(1.0:10.0)
+    keeplargest!(z, 3)
+    @test sort(z; rev = true)[1:3] == [10.0, 9.0, 8.0]
+
+    @test noisiness(zeros(16)) == 0.0
+    @test noisiness([1.0, -1.0, 1.0, -1.0]) ≈ 1 / 0.6744897501960817
+
+    @test sparsity(fill(1.0, 8)) ≈ 0.0 atol = 1e-12
+    @test sparsity([1.0; zeros(7)]) ≈ 1.0
+
+    c = dwt(ones(8, 8), WT_D4, 1)
+    e = rtenergy(c)
+    @test keys(e) == (:ll, :lh, :hl, :hh)
+    @test sum(values(e)) ≈ sum(abs2, c)
+
+    x = rand(64)
+    full = compress(x, WT_D4, 3; keep = 1.0)
+    @test full.x ≈ x
+    @test full.kept == 64
+    @test full.energy ≈ 1.0
+
+    Random.seed!(1)
+    n = 256
+    clean = sin.(2pi .* 4 .* range(0, 1, length = n))
+    noisy = clean .+ 0.2 .* randn(n)
+    plain = denoise(noisy, WT_D4, 3)
+    spun = denoise(noisy, WT_D4, 3; cycles = 8)
+    @test norm(plain - clean) < norm(noisy - clean)
+    @test norm(spun - clean) < norm(plain - clean)
 end
 
 @testset "cascade algorithm" begin

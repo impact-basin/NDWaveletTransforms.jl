@@ -50,6 +50,10 @@ details, which is why it compresses smooth images worse.
 
 ![The two-level coefficients of one image for three bases.](assets/bases-image.png)
 
+For a number rather than a picture, [`sparsity`](@ref) summarises how well a
+basis concentrates a signal, and [`rtenergy`](@ref) gives the energy of each
+subband.
+
 ## Your own taps
 
 Build a basis from a scaling filter, a wavelet filter, or either alone. The
