@@ -21,7 +21,11 @@ cut[abs.(cut) .< 0.1] .= 0     # drop the small coefficients
 s_denoised = idwt(cut, WT_D4, 4)
 ```
 
-![A signal and its four-level coefficients.](assets/coefficients.png)
+Bands are named by their path from the root of the tree, low or high at
+each level, so the strip below reads `LLLL`, `LLLH`, `LLH`, `LH`, `H` from
+coarsest to finest.
+
+![A signal and its four-level coefficients, labelled by band.](assets/coefficients.png)
 
 ## Sparsity
 
@@ -65,29 +69,32 @@ dwt(img, WT_D4, (3, 1))    # the other way round
 
 ![The same image at levels (1, 3) and (3, 1).](assets/levels.png)
 
-## Wavelet packets
+## The four families
 
-`wpt` applies the transform to every subband rather than only the
-approximation band. The coefficient count is unchanged; the recursion
-reaches further into the frequency range, which suits signals whose energy
-is not concentrated at low frequency.
+The prefix selects the recursion: `dwt` and `wpt` are the standard and
+wavelet-packet forms. The `ns` prefix selects the nonstandard ordering,
+which applies every level along one axis before moving to the next.
+
+```julia
+img = rand(128, 128)
+dwt(img, WT_D4, 2)     # standard
+wpt(img, WT_D4, 2)     # every subband recurses
+nsdwt(img, WT_D4, 2)   # nonstandard ordering
+nswpt(img, WT_D4, 2)   # both
+```
+
+![The same image under the four families at two levels.](assets/families.png)
+
+The packet transform subdivides every subband, so the array is a full
+quad-tree rather than a corner of repeated approximation. The nonstandard
+ordering leaves a different arrangement in the detail bands.
+
+A packet transform inverts with `iwpt` and a nonstandard one with
+`nsidwt`:
 
 ```julia
 x = rand(256)
 c = wpt(x, WT_D4, 3)
 iwpt!(c, WT_D4, 3)
 c ≈ x
-```
-
-## Nonstandard transforms
-
-The `ns` family applies every level along one axis before moving to the
-next, where the standard transform advances one level along every axis in
-turn. The two agree at a single level and diverge once the transform
-recurses.
-
-```julia
-img = rand(128, 128)
-dwt(img, WT_D4, (1, 1)) ≈ nsdwt(img, WT_D4, (1, 1))   # true
-dwt(img, WT_D4, (2, 2)) ≈ nsdwt(img, WT_D4, (2, 2))   # false
 ```

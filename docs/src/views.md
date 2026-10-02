@@ -25,7 +25,33 @@ which makes it usable on the left of an assignment:
 @rtview x[:hh] .*= 0.5           # scale the finest HH band
 ```
 
-The result is a `SubArray`, so the transform functions accept it directly.
+`rtree_views(x)` returns every band at the current level as a tuple in the
+order `1:2^ndims(x)`, with the all-low band first.
+
+## Filtering in the wavelet domain
+
+The result is a `SubArray`, so a transform function accepts it directly and
+a mask over the bands selects what survives reconstruction. Keeping one
+oriented detail band is a directional filter:
+
+```julia
+img = rand(256, 256)
+c = dwt(img, WT_D4, 1)
+
+mask = trues(size(c))
+rtree_view(mask, :lh) .= false    # drop one orientation
+rtree_view(mask, :hh) .= false
+c[.!mask] .= 0
+filtered = idwt(c, WT_D4, 1)
+```
+
+![Keeping different subbands of the same image.](assets/views-filter.png)
+
+The test image is vertically striped in its upper half and horizontally
+striped in its lower half. Keeping the approximation alone blurs both.
+Adding `:lh`, which is high along axis 2, restores the vertical stripes and
+leaves the horizontal ones blurred; adding `:hl` does the reverse.
+
 Transforming a subband in place transforms that part of the original array:
 
 ```julia
@@ -34,8 +60,3 @@ dwt!(x, WT_D4, 1)                  # one level everywhere
 dwt!(@rtview(x[:ll]), WT_D4, 2)    # two more levels on the LL band
 idwt!(@rtview(x[:ll]), WT_D4, 2)   # and back
 ```
-
-`rtree_views(x)` returns every band at the current level as a tuple in the
-order `1:2^ndims(x)`, with the all-low band first.
-
-![The subband tiling of a three-level transform.](assets/tiling.png)

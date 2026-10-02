@@ -26,3 +26,12 @@ idwt!(a, WT_D4, 3; convention = :aligned)      # round trips
 `convention` is dispatched at compile time, so neither choice costs
 anything at run time. Use `:aligned` unless you need to match Wavelets.jl
 or reproduce a coefficient layout computed elsewhere.
+
+![The level-1 detail band under both conventions, and the difference of a two-dimensional level-1 transform.](assets/conventions.png)
+
+The left panel shows the level-1 detail band of a one-dimensional D8
+transform under both conventions; the two sequences are the same, rotated
+by three samples. The right panel is the difference of a two-dimensional
+level-1 D4 transform. The approximation band in the top-left corner is
+exactly zero, because the scaling coefficients agree; the detail bands are
+where the two conventions part ways.

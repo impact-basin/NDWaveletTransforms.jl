@@ -17,6 +17,22 @@ of equal-length `SVector`s: a scaling filter φ and a wavelet filter ψ.
 | Best-localised Daubechies | `WT_BL7`, `WT_BL9`, `WT_BL10` |
 | Han | `WT_HAN23`, `WT_HAN33`, `WT_HAN45`, `WT_HAN55` |
 
+## Choosing a basis
+
+Shorter filters localise better in space, longer filters in frequency.
+The first figure sorts the coefficients of a four-level transform by
+magnitude. Haar decays slowest and its 5% reconstruction is visibly
+stair-stepped; Sym4 is smoother and keeps more of the signal. D4 and D8 sit
+between them, and are the usual working choices.
+
+![Coefficient decay and a 5% reconstruction for several bases.](assets/bases.png)
+
+The second figure shows the same image transformed with three bases. The
+coefficient arrays look alike, but Haar puts less energy in the coarse band
+and more in the details, which is why it compresses smooth images worse.
+
+![The two-level coefficients of one image for three bases.](assets/bases-image.png)
+
 ## Your own taps
 
 Build a basis from a scaling filter, a wavelet filter, or either alone. The
@@ -32,12 +48,5 @@ my_d4 = WTOrthogonalBasis(φ = SA[0.2303778, 0.7148466, 0.6308808, -0.0279838,
 ```
 
 The filters are `SVector`s, so their length is part of the type. A basis
-with different-length φ and ψ cannot be constructed.
-
-## Choosing a basis
-
-Shorter filters localise better in space, longer filters in frequency. Haar
-is the extreme: exact on piecewise-constant signals, and visibly blocky on
-anything smooth. D4 and D8 are the usual working choices when the signal is
-smooth but not polynomial. `complement` returns the filter that pairs with
-another.
+with different-length φ and ψ cannot be constructed. `complement` returns
+the filter that pairs with another.
