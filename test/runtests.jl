@@ -2,6 +2,7 @@ using Test
 using Random
 using NDWaveletTransforms
 import Wavelets as W
+import FLoops
 
 @testset "Correctness" begin
     @test dwt(ones(4, 4), WT_HAAR, 1) ≈ [
@@ -494,6 +495,26 @@ end
         end
     else
         @info "CUDA not available; skipping GPU tests"
+    end
+end
+
+@testset "threaded passes are free of FLoops boxes" begin
+    if Threads.nthreads() > 1
+        # boxing is a warning by default; make it fail the suite
+        FLoops.assistant(:error)
+        try
+            for conv in (:aligned, :wavelets)
+                x = rand(128, 128, 32)
+                y = copy(x)
+                dwt!(x, WT_D8, 1; convention = conv)
+                idwt!(x, WT_D8, 1; convention = conv)
+                @test x ≈ y
+            end
+        finally
+            FLoops.assistant(:warn)
+        end
+    else
+        @info "single-threaded; skipping the FLoops box check"
     end
 end
 

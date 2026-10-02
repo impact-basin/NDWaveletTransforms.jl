@@ -13,6 +13,9 @@ end
     ) end
 end
 
+# `@floop` boxes a captured variable that is assigned in a branch before the
+# loop. The strided passes hoist n1, odims, odsize, ngrid and nblocks above
+# the CONTIG split for this reason; a Box in the hot loop costs real time.
 macro maybe_thread(s::Symbol, expr...)
     return quote
         if $s
@@ -245,6 +248,12 @@ end
     nplain = max(0, (n - ntaps + 2) >> 1)
     dothread = top && Threads.nthreads() > 1 && length(x) * ntaps >= _THREAD_MIN_WORK
 
+    n1 = size(x, 1)
+    odims = Tuple(d for d in 1:N if d != 1 && d != ax)
+    odsize = Tuple(size(x, d) for d in odims)
+    ngrid = prod(odsize)
+    nblocks = cld(ngrid, _PASS_BLOCK)
+
     if CONTIG
         # lines (along axis 1) are memory-contiguous: line-outer, pair-inner.
         @maybe_thread dothread for c in CartesianIndices(ntuple(d -> d == 1 ? 1 : size(x, d), N))
@@ -278,11 +287,6 @@ end
         # ~ntaps/2 times, so the pair loop is blocked over the other-axis
         # coordinates: each block's data stays cache-resident across the
         # pair loop and the re-reads come from cache instead of DRAM.
-        n1 = size(x, 1)
-        odims = Tuple(d for d in 1:N if d != 1 && d != ax)
-        odsize = Tuple(size(x, d) for d in odims)
-        ngrid = prod(odsize)
-        nblocks = cld(ngrid, _PASS_BLOCK)
         @maybe_thread dothread for blk in 1:nblocks
             f0 = (blk - 1) * _PASS_BLOCK + 1
             f1 = min(blk * _PASS_BLOCK, ngrid)
@@ -354,6 +358,12 @@ end
     nwrap = (ntaps - 1) >> 1
     dothread = top && Threads.nthreads() > 1 && length(x) * ntaps >= _THREAD_MIN_WORK
 
+    n1 = size(x, 1)
+    odims = Tuple(d for d in 1:N if d != 1 && d != ax)
+    odsize = Tuple(size(x, d) for d in odims)
+    ngrid = prod(odsize)
+    nblocks = cld(ngrid, _PASS_BLOCK)
+
     if CONTIG
         @maybe_thread dothread for c in CartesianIndices(ntuple(d -> d == 1 ? 1 : size(x, d), N))
             base  = _line_base(Val(N), sx, c, 1)
@@ -388,11 +398,6 @@ end
             end
         end
     else
-        n1 = size(x, 1)
-        odims = Tuple(d for d in 1:N if d != 1 && d != ax)
-        odsize = Tuple(size(x, d) for d in odims)
-        ngrid = prod(odsize)
-        nblocks = cld(ngrid, _PASS_BLOCK)
         @maybe_thread dothread for blk in 1:nblocks
             f0 = (blk - 1) * _PASS_BLOCK + 1
             f1 = min(blk * _PASS_BLOCK, ngrid)
@@ -487,6 +492,12 @@ end
     ntaps = length(φ)
     dothread = top && Threads.nthreads() > 1 && length(x) * ntaps >= _THREAD_MIN_WORK
 
+    n1 = size(x, 1)
+    odims = Tuple(d for d in 1:N if d != 1 && d != ax)
+    odsize = Tuple(size(x, d) for d in odims)
+    ngrid = prod(odsize)
+    nblocks = cld(ngrid, _PASS_BLOCK)
+
     if CONTIG
         @maybe_thread dothread for c in CartesianIndices(ntuple(d -> d == 1 ? 1 : size(x, d), N))
             base  = _line_base(Val(N), sx, c, 1)
@@ -518,11 +529,6 @@ end
         # positions are disjoint, so threading over j is race-free. The
         # other-axis grid is blocked so the coefficient re-reads across j
         # hit cache.
-        n1 = size(x, 1)
-        odims = Tuple(d for d in 1:N if d != 1 && d != ax)
-        odsize = Tuple(size(x, d) for d in odims)
-        ngrid = prod(odsize)
-        nblocks = cld(ngrid, _PASS_BLOCK)
         tmax_t = (ntaps + n - 1) ÷ n
         φv = Vector{T}(φ)
         ψv = Vector{T}(ψ)
@@ -553,11 +559,6 @@ end
         # strided lines, single-threaded: the transposed k-outer scatter
         # vectorises like the forward pass, blocked over the other-axis
         # grid so the read-modify-write re-reads hit cache.
-        n1 = size(x, 1)
-        odims = Tuple(d for d in 1:N if d != 1 && d != ax)
-        odsize = Tuple(size(x, d) for d in odims)
-        ngrid = prod(odsize)
-        nblocks = cld(ngrid, _PASS_BLOCK)
         for blk in 1:nblocks
             f0 = (blk - 1) * _PASS_BLOCK + 1
             f1 = min(blk * _PASS_BLOCK, ngrid)
@@ -628,6 +629,12 @@ end
     ntaps = length(φ)
     dothread = top && Threads.nthreads() > 1 && length(x) * ntaps >= _THREAD_MIN_WORK
 
+    n1 = size(x, 1)
+    odims = Tuple(d for d in 1:N if d != 1 && d != ax)
+    odsize = Tuple(size(x, d) for d in odims)
+    ngrid = prod(odsize)
+    nblocks = cld(ngrid, _PASS_BLOCK)
+
     if CONTIG
         @maybe_thread dothread for c in CartesianIndices(ntuple(d -> d == 1 ? 1 : size(x, d), N))
             base  = _line_base(Val(N), sx, c, 1)
@@ -669,11 +676,6 @@ end
     elseif dothread
         # strided lines, threaded: gather over output positions
         # (write-once, race-free over j), blocked over the other-axis grid.
-        n1 = size(x, 1)
-        odims = Tuple(d for d in 1:N if d != 1 && d != ax)
-        odsize = Tuple(size(x, d) for d in odims)
-        ngrid = prod(odsize)
-        nblocks = cld(ngrid, _PASS_BLOCK)
         tmax_t = (ntaps + n - 1) ÷ n
         φv = Vector{T}(φ)
         ψv = Vector{T}(ψ)
@@ -712,11 +714,6 @@ end
     else
         # strided lines, single-threaded: transposed k-outer scatter,
         # blocked over the other-axis grid.
-        n1 = size(x, 1)
-        odims = Tuple(d for d in 1:N if d != 1 && d != ax)
-        odsize = Tuple(size(x, d) for d in odims)
-        ngrid = prod(odsize)
-        nblocks = cld(ngrid, _PASS_BLOCK)
         for blk in 1:nblocks
             f0 = (blk - 1) * _PASS_BLOCK + 1
             f1 = min(blk * _PASS_BLOCK, ngrid)
