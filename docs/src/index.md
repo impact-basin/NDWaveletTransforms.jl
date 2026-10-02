@@ -58,9 +58,34 @@ single level.
 The `convention` keyword selects the phase of the detail coefficients; see
 [Phase conventions](@ref).
 
+## Denoising and compression
+
+Coefficients can be shrunk before inverting. [`denoise`](@ref) estimates the
+noise from the finest detail band, thresholds the detail coefficients, and
+inverts. [`compress`](@ref) keeps a fraction of the coefficients instead.
+[Algorithms](@ref) has the details and the shrinkage rules.
+
+```julia
+clean = denoise(noisy, WT_D4, 4)
+small = compress(image, WT_D4, 3; keep = 0.05)
+```
+
+## GPU
+
+The same code runs on a GPU through KernelAbstractions.jl. Pass a GPU array
+and the dispatch follows; every transform family is covered.
+
+```julia
+using CUDA
+g = CuArray(rand(Float32, 1024, 1024))
+y = dwt(g, WT_D4, 3)
+```
+
 ## Where to go next
 
 - [Examples](@ref) for a guided tour.
+- [Phase conventions](@ref) for the `:aligned` and `:wavelets` phases.
 - [Subbands and views](@ref) for reading and writing individual bands.
 - [Bases](@ref) for the built-in filters and your own.
+- [Algorithms](@ref) for the cascade and the denoiser.
 - [API reference](@ref) for the full list.

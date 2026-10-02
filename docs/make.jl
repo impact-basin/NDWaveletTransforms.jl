@@ -17,7 +17,6 @@ makedocs(;
         "Subbands and views" => "views.md",
         "Bases" => "bases.md",
         "Algorithms" => "algorithms.md",
-        "GPU" => "gpu.md",
         "API reference" => "api.md",
     ],
 )
