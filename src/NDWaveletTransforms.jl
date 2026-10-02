@@ -8,16 +8,13 @@ end
 
 using StyledStrings
 using StaticArrays
-using Primes
 using LinearAlgebra
-using Match
 using Base.Threads
 using MacroTools: @capture, postwalk, prewalk
 using MacroTools: splitdef, splitarg, rmlines
 using MacroTools: prettify, unblock
 using Base.Iterators
 using FLoops
-using EllipsisNotation
 using Strided
 using KernelAbstractions
 using Adapt

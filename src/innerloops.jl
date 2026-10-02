@@ -5,13 +5,13 @@
 # Two phase conventions are supported, dispatched on `Val{C}` (compile-time,
 # zero runtime cost):
 #
-#   :aligned   — the scaling and wavelet filters act on the same input
+#   :aligned   -- the scaling and wavelet filters act on the same input
 #                window: a[j] = Σ φ[k] x[2j-1+k-1],
 #                        d[j] = Σ ψ[k] x[2j-1+k-1]   (mod 1 wrap-around).
 #                This is the textbook phase (e.g. PyWavelets/Matlab-style)
 #                and is the default.
 #
-#   :wavelets  — the Wavelets.jl-compatible phase: the wavelet filter's
+#   :wavelets  -- the Wavelets.jl-compatible phase: the wavelet filter's
 #                window starts N-2 taps before the scaling filter's window,
 #                        d[j] = Σ ψ[k] x[2j+k-N]     (mod 1 wrap-around).
 #                Equivalently the detail coefficients are the aligned ones

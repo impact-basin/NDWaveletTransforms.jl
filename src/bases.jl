@@ -24,7 +24,7 @@ struct WTOrthogonalBasis{N, T<:Number} <: WTBasis
     # convenience constructor 1: specified scaling/wavelet filters.
     """
         WTOrthogonalBasis(φ, ψ)
-        
+
         Convenience constructor for WTOrthogonalBasis class.
         Takes scaling and wavelet filters for φ and ψ.
     """
@@ -54,10 +54,10 @@ struct WTOrthogonalBasis{N, T<:Number} <: WTBasis
         Convenience constructor for WTOrthogonalBasis. Determines
         scaling function by orthogonalisation.
     """
-    function WTOrthogonalBasis(; φ :: Union{SVector{N,T}, Nothing} = nothing, 
+    function WTOrthogonalBasis(; φ :: Union{SVector{N,T}, Nothing} = nothing,
                                  ψ :: Union{SVector{N,T}, Nothing} = nothing) where {N, T <: AbstractFloat}
 
-        
+
         # sanity check
         (isnothing(φ) && isnothing(ψ)) && error("WTOrthogonalBasis: no basis specified!")
         ψ = isnothing(ψ) ? complement(φ) : ψ

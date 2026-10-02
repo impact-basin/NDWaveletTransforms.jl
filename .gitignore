@@ -1,16 +1,11 @@
 Manifest.toml
-
-# julia depot and package caches (workspace-local)
 .julia_depot/
 
 # scratch output from benchmarks and test runs
+bench/
 .bench4d_*.txt
 .check2_out.txt
 .dbg_lvl*.txt
 .prof4d.txt
 .proto_block.txt
 .runtests5.txt
-
-# agent scratch (converted into test/view-transforms.jl in stage 1)
-test/_diag*.jl
-test/_repro.jl

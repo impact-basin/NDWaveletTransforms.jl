@@ -5,7 +5,7 @@
 
 @fastfun function cyclespinning!(f, x, n=4; start=16)
     for p in (prime(i + start) for i=1:4)
-        cyclespin!(x, p) 
+        cyclespin!(x, p)
         f(x)
         cyclespin!(x, -p)
     end

@@ -3,6 +3,7 @@ using Random
 using NDWaveletTransforms
 import Wavelets as W
 import FLoops
+import Aqua
 
 @testset "Correctness" begin
     @test dwt(ones(4, 4), WT_HAAR, 1) ≈ [
@@ -516,6 +517,13 @@ end
     else
         @info "single-threaded; skipping the FLoops box check"
     end
+end
+
+@testset "Aqua" begin
+    Aqua.test_stale_deps(NDWaveletTransforms)
+    Aqua.test_deps_compat(NDWaveletTransforms)
+    Aqua.test_ambiguities(NDWaveletTransforms)
+    Aqua.test_piracies(NDWaveletTransforms)
 end
 
 include("view-transforms.jl")

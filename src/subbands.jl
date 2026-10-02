@@ -6,7 +6,7 @@
 #
 # to set all scaling coefficients to zero.
 
-@generated function rtree_views(x::T) :: Tuple{SubArray{E, N, T}} where {E, N, T <: AbstractArray{E, N}}  
+@generated function rtree_views(x::T) where {E, N, T <: AbstractArray{E, N}}
     inds = [((i & (1<<(N-j))) == 0 ?
                 :(1:size(x, $j)>>1) :
                 :(size(x, $j)>>1 + 1:size(x, $j))
@@ -20,7 +20,7 @@ end
 Base.@constprop :aggressive rtree_view(x, i::Int) = rtree_views(x)[i]
 
 Base.@constprop :aggressive lh_str_to_num(s :: String) =
-    parse(Int, 
+    parse(Int,
         replace(s, r"(L|l)" => s"0", r"(H|h)" => s"1");
         base=2
     ) + 1
