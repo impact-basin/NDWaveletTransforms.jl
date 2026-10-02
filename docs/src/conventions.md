@@ -38,14 +38,15 @@ coefficients.
 
 ## Two dimensions
 
-The same comparison on an image. The first panel is the image. The second
-is the aligned level-1 coefficients, with the approximation band in the
-top-left corner. The third is the difference between the two conventions.
-It is exactly zero in the approximation band, because the scaling
-coefficients agree, and non-zero in every detail band, because those
-coefficients are rotated.
+The same comparison on a compact feature, with a four-level `WT_D8`
+transform. The first panel is the image. The middle and right panels are
+the same coefficients under the two conventions, with the subband
+boundaries drawn. The approximation band in the top-left corner is
+identical, because the scaling coefficients agree. Every detail band is
+rotated, and the rotation is a larger fraction of a coarser band, so the
+displacement grows with depth.
 
-![The image, the aligned coefficients, and the difference between the conventions for a two-dimensional transform.](assets/phase-2d.png)
+![The image, and the same multilevel coefficients under the two conventions.](assets/phase-2d.png)
 
 ## The wavelet under each convention
 

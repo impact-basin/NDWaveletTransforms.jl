@@ -131,22 +131,27 @@ axislegend(ax2; position = :rt)
 save(joinpath(ASSETS, "phase-1d.png"), fig)
 
 # --- phase conventions: two dimensions ------------------------------------
-al2 = dwt(img, WT_D4, 1; convention = :aligned)
-wv2 = dwt(img, WT_D4, 1; convention = :wavelets)
-fig = Figure(size = (1400, 440))
+yy = reshape(1:size(img, 1), :, 1)
+xx = reshape(1:size(img, 2), 1, :)
+dot = Float64.(((xx .- 108) .^ 2 .+ (yy .- 148) .^ 2) .< 20^2)
+lvl = 4
+al2 = dwt(dot, WT_D8, lvl; convention = :aligned)
+wv2 = dwt(dot, WT_D8, lvl; convention = :wavelets)
+vmin, vmax = extrema(logmag(al2))
+fig = Figure(size = (1500, 500))
 ax1 = Axis(fig[1, 1]; title = "image", yreversed = true, aspect = DataAspect())
-heatmap!(ax1, img; colormap = [:black, :white])
+heatmap!(ax1, dot; colormap = [:black, :white])
 hidedecorations!(ax1); hidespines!(ax1)
-ax2 = Axis(fig[1, 2]; title = ":aligned coefficients", yreversed = true, aspect = DataAspect())
-heatmap!(ax2, logmag(al2); colormap = :viridis)
-vlines!(ax2, [size(img, 2) / 2 + 0.5]; color = (:white, 0.8))
-hlines!(ax2, [size(img, 1) / 2 + 0.5]; color = (:white, 0.8))
-text!(ax2, 64, 64; text = "identical", color = :white, align = (:center, :center))
-hidedecorations!(ax2); hidespines!(ax2)
-ax3 = Axis(fig[1, 3]; title = ":aligned - :wavelets", yreversed = true, aspect = DataAspect())
-heatmap!(ax3, logmag(al2 - wv2); colormap = :magma)
-text!(ax3, 64, 64; text = "zero", color = :white, align = (:center, :center))
-hidedecorations!(ax3); hidespines!(ax3)
+for (i, (title, c)) in enumerate(((":aligned", al2), (":wavelets", wv2)))
+    axc = Axis(fig[1, i + 1]; title = title, yreversed = true, aspect = DataAspect())
+    heatmap!(axc, logmag(c); colormap = :viridis, colorrange = (vmin, vmax))
+    for j in 1:lvl
+        b = size(img, 1) / 2^j + 0.5
+        vlines!(axc, [b]; color = (:white, 0.45), linewidth = 0.8)
+        hlines!(axc, [b]; color = (:white, 0.45), linewidth = 0.8)
+    end
+    hidedecorations!(axc); hidespines!(axc)
+end
 save(joinpath(ASSETS, "phase-2d.png"), fig)
 
 # --- filtering in the wavelet domain --------------------------------------
