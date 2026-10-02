@@ -51,8 +51,10 @@ export rtree_view
 export @rtview
 
 include("innerloops.jl")
+include("innerloops-inverse.jl")
 include("gpu.jl")
 include("dwt.jl")
+include("passes.jl")
 export dwt!
 export dwt
 export idwt!
