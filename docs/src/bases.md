@@ -1,9 +1,11 @@
 # Bases
 
-Every basis is orthogonal and represented by a `WTOrthogonalBasis`, a pair
-of equal-length `SVector`s: a scaling filter φ and a wavelet filter ψ. The
-name carries the vanishing-moment count, so `WT_DN` has `N` vanishing
-moments and `2N` taps; `WT_D4` is the eight-tap filter.
+At the moment, only orthogonal bases are supported.
+
+Every basis is orthogonal and represented by a `WTOrthogonalBasis`, which
+contains scaling and wavelet filters as static vectors.
+
+The wavelets currently supported are given in the following table.
 
 | Kind | Symbols |
 |---|---|
@@ -21,8 +23,8 @@ moments and `2N` taps; `WT_D4` is the eight-tap filter.
 
 ## The functions behind the filters
 
-The filters generate a scaling function φ and a wavelet function ψ through
-the refinement equation. [`cascade`](@ref) samples both.
+By the cascade algorithm, filters generate scaling and wavelet functions.
+For a given basis, [`cascade`](@ref) generates these functions, e.g.
 
 ```julia
 φ, ψ = cascade(WT_D4, 8)
@@ -30,23 +32,21 @@ the refinement equation. [`cascade`](@ref) samples both.
 
 ![The scaling function φ and the wavelet function ψ of four bases.](assets/bases-functions.png)
 
-Haar's φ is a box and its ψ a square wave. Longer filters give smoother
-functions with wider support: `WT_D8` lives on `[0, 15]` against Haar's
-`[0, 1]`. That is the trade-off behind the choice below.
+Filters with more vanishing moments yield smoother functions, as higher derivatives of their
+scaling and wavelet functions are bounded. However, this also yields wider support and phase sensitivity.
 
 ## Choosing a basis
 
-Shorter filters localise better in space, longer filters in frequency. The
-next figure sorts the coefficients of a four-level transform by magnitude.
-Haar decays slowest and its 5% reconstruction is visibly stair-stepped;
-Sym4 is smoother and keeps more of the signal. D4 and D8 sit between them,
-and are the usual working choices.
+Different signals are best approximated in different bases, depending on their characteristics.
+The next figure shows coefficient magnitudes for a transformed signal under a few different bases;
+note their different decay properties. An approximation to the signal, using the 5% of coefficients
+with largest magnitude, is also shown. The classic blockiness of the Haar transform is clearly seen;
+on the other hand, the Sym4 wavelet more accureately captures smooth HF energy as it has more vanishing moments.
 
 ![Coefficient decay and a 5% reconstruction for several bases.](assets/bases.png)
 
-The same image transformed with three bases shows little difference in
-layout, but Haar puts less energy in the coarse band and more in the
-details, which is why it compresses smooth images worse.
+The transform of the 2D signal from the "examples" section shows the Haar transform
+failing to sparsify smooth variation in the signal.
 
 ![The two-level coefficients of one image for three bases.](assets/bases-image.png)
 
@@ -54,11 +54,12 @@ For a number rather than a picture, [`sparsity`](@ref) summarises how well a
 basis concentrates a signal, and [`rtenergy`](@ref) gives the energy of each
 subband.
 
-## Your own taps
+## DIY Wavelet Bases
 
-Build a basis from a scaling filter, a wavelet filter, or either alone. The
-constructor normalises the taps and derives the missing filter as the
-orthogonal complement of the one you give.
+Wavelet bases and transforms can be specified by the user from PR-QMF taps.
+Either scaling or wavelet taps can be specified; the "flip-and-reverse" trick
+is used to calculate the corresponding orthogonal filter. These must be
+passed to the constructor as static arrays, like so:
 
 ```julia
 using StaticArrays
@@ -68,6 +69,5 @@ my_d4 = WTOrthogonalBasis(φ = SA[0.2303778, 0.7148466, 0.6308808, -0.0279838,
                               -0.1870348, 0.0308414, 0.0328830, -0.0105974])
 ```
 
-The filters are `SVector`s, so their length is part of the type. A basis
-with different-length φ and ψ cannot be constructed. `complement` returns
-the filter that pairs with another.
+
+
