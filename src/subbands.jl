@@ -1,12 +1,21 @@
 # subbands.jl -- helpers for working with subbands.
-# For the most part, you will want @wtview and friends.
-# This will allow you to write e.g.
+# For the most part, you will want @rtview, which lets you write
 #
-# @wtview a[:ll] .= 0
+#     @rtview a[:ll] .= 0
 #
 # to set all scaling coefficients to zero.
 
-@generated function rtree_views(x::T) :: Tuple{SubArray{E, N, T}} where {E, N, T <: AbstractArray{E, N}}  
+"""
+    rtree_views(x)
+
+Return every first-level subband of `x` as a tuple of views, in the order
+used by [`rtree_view`](@ref). Band `1` is the approximation band and band
+`2^ndims(x)` is high along every axis.
+
+Each view is half the length of `x` along every axis, so on a multi-level
+coefficient array `rtree_views` returns the bands of the finest level.
+"""
+@generated function rtree_views(x::T) where {E, N, T <: AbstractArray{E, N}}
     inds = [((i & (1<<(N-j))) == 0 ?
                 :(1:size(x, $j)>>1) :
                 :(size(x, $j)>>1 + 1:size(x, $j))
@@ -17,10 +26,27 @@
     end
 end
 
+"""
+    rtree_view(x, band)
+
+Return a view of one subband of `x`, the coefficient array of a wavelet
+transform.
+
+`band` is an `Int` index into [`rtree_views`](@ref), or a `Symbol` or
+`String` naming the band. Names read one letter per axis, `l` for low and
+`h` for high, so `:ll` is the 2-D approximation band, `:lh` is low along
+axis 1 and high along axis 2, and `:hh` is high along both. Indices run
+from `1` for all-low to `2^ndims(x)` for all-high.
+
+Chaining navigates a multi-level transform. After `dwt!(x, WT_D4, 2)`,
+`rtree_view(rtree_view(x, :ll), :ll)`, or `@rtview x[:ll, :ll]`, is the
+coarsest approximation band. The result is a `SubArray`, so writing to it
+writes to `x`.
+"""
 Base.@constprop :aggressive rtree_view(x, i::Int) = rtree_views(x)[i]
 
 Base.@constprop :aggressive lh_str_to_num(s :: String) =
-    parse(Int, 
+    parse(Int,
         replace(s, r"(L|l)" => s"0", r"(H|h)" => s"1");
         base=2
     ) + 1
@@ -31,6 +57,18 @@ Base.@constprop :aggressive rtree_view(x, s::String) =
 Base.@constprop :aggressive rtree_view(x, s::Symbol) =
     rtree_view(x, String(s))
 
+"""
+    @rtview x[band]
+
+Rewrite subband indexing into calls to [`rtree_view`](@ref). The result is
+a `SubArray`, so the macro works on either side of an assignment or a
+broadcast:
+
+    @rtview a[:ll] .= 0       # zero the approximation band
+    b = @rtview a[:hl, :hh]   # HH band of the HL band
+
+Multiple bands chain from the outside in.
+"""
 macro rtview(expr)
     postwalk(expr) do e
         @capture(e, x_[inds__]) || return e
@@ -39,12 +77,6 @@ macro rtview(expr)
             e = :(rtree_view($e, $ind))
         end
         return e
-    end
-end
-
-macro wtview(expr)
-    return quote
-        @rtview $expr
     end
 end
 

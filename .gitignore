@@ -1,1 +1,12 @@
 Manifest.toml
+.julia_depot/
+docs/build/
+
+# scratch output from benchmarks and test runs
+bench/
+.bench4d_*.txt
+.check2_out.txt
+.dbg_lvl*.txt
+.prof4d.txt
+.proto_block.txt
+.runtests5.txt

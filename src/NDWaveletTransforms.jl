@@ -10,14 +10,13 @@ using StyledStrings
 using StaticArrays
 using Primes
 using LinearAlgebra
-using Match
+using Statistics
 using Base.Threads
 using MacroTools: @capture, postwalk, prewalk
 using MacroTools: splitdef, splitarg, rmlines
 using MacroTools: prettify, unblock
 using Base.Iterators
 using FLoops
-using EllipsisNotation
 using Strided
 using KernelAbstractions
 using Adapt
@@ -48,14 +47,19 @@ export WT_BL7,     WT_BL9,     WT_BL10
 export WT_BEYL
 export WT_VAID
 
+include("cascade.jl")
+export cascade
+
 include("subbands.jl")
 export rtree_views
 export rtree_view
 export @rtview
 
 include("innerloops.jl")
+include("innerloops-inverse.jl")
 include("gpu.jl")
 include("dwt.jl")
+include("passes.jl")
 export dwt!
 export dwt
 export idwt!
@@ -64,6 +68,15 @@ export wpt!
 export wpt
 export iwpt!
 export iwpt
+
+include("processing.jl")
+export threshold!
+export keeplargest!
+export noisiness
+export rtenergy
+export sparsity
+export denoise
+export compress
 
 include("ns-dwt.jl")
 export nsdwt!

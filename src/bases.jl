@@ -1,16 +1,36 @@
 # ---------------------
 # abstract signal types
 # ---------------------
+"""
+    WTBasis
+
+Abstract supertype for wavelet bases. The only concrete basis is
+[`WTOrthogonalBasis`](@ref).
+"""
 abstract type WTBasis end
 
 """
-    WTOrthogonalBasis: Basis for an orthogonal wavelet transform.
+    WTOrthogonalBasis(φ, ψ)
+    WTOrthogonalBasis(; φ = nothing, ψ = nothing)
 
-    This structure represents an orthogonal DWT basis.
-    Scaling and wavelet filters for the 1D and 2D case
-    are stored. The length of the tap vector is
-    additionally stored. Convenience constructors are
-    provided.
+An orthogonal wavelet basis, stored as a scaling filter `φ` and a wavelet
+filter `ψ` of equal-length `SVector`s. Both filters are normalised on
+construction.
+
+The keyword form needs only one filter: the other is derived as its
+orthogonal complement with [`complement`](@ref). The positional form takes
+both.
+
+# Examples
+
+```julia
+using StaticArrays
+
+const MY_HAAR   = WTOrthogonalBasis(φ = SA[1.0, 1.0])
+const MY_HAAR_ψ = WTOrthogonalBasis(ψ = SA[1.0, -1.0])
+```
+
+See the [Bases](@ref) page for the built-in bases.
 """
 struct WTOrthogonalBasis{N, T<:Number} <: WTBasis
     # fields
@@ -21,13 +41,7 @@ struct WTOrthogonalBasis{N, T<:Number} <: WTBasis
     # ψφ :: SMatrix{N, N, T} # wavelet filter
     # ψψ :: SMatrix{N, N, T} # wavelet filter
 
-    # convenience constructor 1: specified scaling/wavelet filters.
-    """
-        WTOrthogonalBasis(φ, ψ)
-        
-        Convenience constructor for WTOrthogonalBasis class.
-        Takes scaling and wavelet filters for φ and ψ.
-    """
+    # both filters given explicitly
     function WTOrthogonalBasis(φ :: SVector{N, T},
                                ψ :: SVector{N, T}) where {N, T <: AbstractFloat}
 
@@ -46,18 +60,11 @@ struct WTOrthogonalBasis{N, T<:Number} <: WTBasis
         )
     end
 
-    # convenience 2: just the wavelet, let the code
-    # derive an orthogonal scaling filter for you.
-    """
-        WTOrthogonalBasis(ψ)
-
-        Convenience constructor for WTOrthogonalBasis. Determines
-        scaling function by orthogonalisation.
-    """
-    function WTOrthogonalBasis(; φ :: Union{SVector{N,T}, Nothing} = nothing, 
+    # one filter given; derive the other by orthogonalisation
+    function WTOrthogonalBasis(; φ :: Union{SVector{N,T}, Nothing} = nothing,
                                  ψ :: Union{SVector{N,T}, Nothing} = nothing) where {N, T <: AbstractFloat}
 
-        
+
         # sanity check
         (isnothing(φ) && isnothing(ψ)) && error("WTOrthogonalBasis: no basis specified!")
         ψ = isnothing(ψ) ? complement(φ) : ψ
