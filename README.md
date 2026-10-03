@@ -1,6 +1,6 @@
 # NDWaveletTransforms.jl
 
-This package implements the discrete wavelet transform, its inverse, and friends. See the [documentation](https://impact-basin.github.io/NDWaveletTransforms.jl/stable/) for details.
+This package implements the discrete wavelet transform, its inverse, and friends. See the [documentation](https://impact-basin.github.io/NDWaveletTransforms.jl/dev/) for details.
 
 Users will probably prefer the more feature-complete Wavelets.jl library; this package emphasises flexibility over features. Namely, this package supports transforms of arbitrary-dimensional signals, with different transform levels along each dimension. The signal need not be dyadic in any dimension; perfect reconstruction is assured up to an N-level transform in any dimension so long as the length has a factor of 2^N.
 
