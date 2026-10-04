@@ -57,6 +57,14 @@ Base.@constprop :aggressive rtree_view(x, s::String) =
 Base.@constprop :aggressive rtree_view(x, s::Symbol) =
     rtree_view(x, String(s))
 
+
+Base.@constprop :aggressive rtree_view(x, s::Vector{Symbol}) = length(s) == 1 ?
+    rtree_view(x, s[1]) :
+    rtree_view(rtree_view(x, s[1:end-1]), s[end])
+
+Base.@constprop :aggressive rtree_view(x, s...) =
+    rtree_view(x, collect(s))
+
 """
     @rtview x[band]
 

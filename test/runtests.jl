@@ -385,6 +385,35 @@ end
     @test rtree_view(x, 8) ≈ rtree_view(x, :hhh)
 end
 
+@testset "rtree: varargs/vectors" begin
+    x = rand(4)
+    @test rtree_view(x, :l) ≈ rtree_view(x, [:l])
+    @test rtree_view(x, :h) ≈ rtree_view(x, [:h])
+    x = rand(4, 4)
+    rtree_view(x, :ll) ≈ rtree_view(x, [:ll])
+    rtree_view(x, :lh) ≈ rtree_view(x, [:lh])
+    rtree_view(x, :hl) ≈ rtree_view(x, [:hl])
+    rtree_view(x, :hh) ≈ rtree_view(x, [:hh])
+    x = rand(4, 4, 4)
+    @test rtree_view(x, :lll) ≈ rtree_view(x, [:lll])
+    @test rtree_view(x, :llh) ≈ rtree_view(x, [:llh])
+    @test rtree_view(x, :lhl) ≈ rtree_view(x, [:lhl])
+    @test rtree_view(x, :lhh) ≈ rtree_view(x, [:lhh])
+    @test rtree_view(x, :hll) ≈ rtree_view(x, [:hll])
+    @test rtree_view(x, :hlh) ≈ rtree_view(x, [:hlh])
+    @test rtree_view(x, :hhl) ≈ rtree_view(x, [:hhl])
+    @test rtree_view(x, :hhh) ≈ rtree_view(x, [:hhh])
+    x = rand(8, 8)
+    @test rtree_view(x, :ll, :ll) ≈ rtree_view(x, [:ll, :ll])
+    @test rtree_view(x, :lh, :ll) ≈ rtree_view(x, [:lh, :ll])
+    @test rtree_view(x, :hl, :ll) ≈ rtree_view(x, [:hl, :ll])
+    @test rtree_view(x, :hh, :ll) ≈ rtree_view(x, [:hh, :ll])
+    @test rtree_view(x, :ll, :ll) ≈ rtree_view(x, [:ll, :ll])
+    @test rtree_view(x, :lh, :lh) ≈ rtree_view(x, [:lh, :lh])
+    @test rtree_view(x, :hl, :hl) ≈ rtree_view(x, [:hl, :hl])
+    @test rtree_view(x, :hh, :hh) ≈ rtree_view(x, [:hh, :hh])
+end
+
 @testset "@rtview macro, basic usage" begin
     x = rand(4)
     @test rtree_view(x, :l) ≈ @rtview x[:l]
