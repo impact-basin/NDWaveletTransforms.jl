@@ -65,6 +65,9 @@ Base.@constprop :aggressive rtree_view(x, s::Vector{Symbol}) = length(s) == 1 ?
 Base.@constprop :aggressive rtree_view(x, s...) =
     rtree_view(x, collect(s))
 
+const rtview  = rtree_view
+const rtviews = rtree_views
+
 """
     @rtview x[band]
 
@@ -75,19 +78,33 @@ broadcast:
     @rtview a[:ll] .= 0       # zero the approximation band
     b = @rtview a[:hl, :hh]   # HH band of the HL band
 
-Multiple bands chain from the outside in.
+Multiple bands chain from the outside in. Only references whose indices are
+all band names (`Symbol`, `String`, or `QuoteNode`) are rewritten; `a[1]` and
+`a[1:4]` are left alone.
 """
+isbandname(ind) = ind isa Symbol ||
+                  (ind isa QuoteNode && ind.value isa Symbol) ||
+                  ind isa AbstractString
+
 macro rtview(expr)
-    postwalk(expr) do e
+    rv  = GlobalRef(@__MODULE__, :rtree_view)
+    out = postwalk(expr) do e
         @capture(e, x_[inds__]) || return e
-        e = :(rtree_view($(esc(x)), $(inds[1])))
+        all(isbandname, inds) || return e
+        e = :($rv($x, $(inds[1])))
         for ind in inds[2:end]
-            e = :(rtree_view($e, $ind))
+            e = :($rv($e, $ind))
         end
         return e
     end
+    return esc(out)
 end
 
 subspaces(w, x, wpt) = wpt ?
     zip(rtree_views(w), rtree_views(x)) :
     ((rtree_view(w, 1), rtree_view(x, 1)),)
+
+"`rtview()`: Alias for `rtree_view()`."
+const rtview  = rtree_view
+"`rtviews()`: Alias for `rtree_views()`."
+const rtviews = rtree_views

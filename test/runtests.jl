@@ -442,6 +442,23 @@ end
     @test rtree_view(rtree_view(x, :h), :h) ≈ @rtview x[:h, :h]
 end
 
+@testset "@rtview macro, band names only" begin
+    x = rand(4, 4)
+    @test rtree_view(x, "ll") ≈ @rtview x["ll"]
+
+    band = :ll
+    @test rtree_view(x, band) ≈ @rtview x[band]
+
+    # integers and ranges are ordinary indexing, not bands
+    @test string(@macroexpand(@rtview x[1]))      == "x[1]"
+    @test string(@macroexpand(@rtview x[1:2]))    == "x[1:2]"
+    @test string(@macroexpand(@rtview x[:ll, 1])) == "x[:ll, 1]"
+
+    # free symbols in the surrounding expression stay in the caller's scope
+    z = rand(2, 2)
+    @test (@rtview x[:ll] .+ z) ≈ rtree_view(x, :ll) .+ z
+end
+
 @testset "GPU (KernelAbstractions) transforms" begin
     gpu_ok = false
     try
@@ -633,6 +650,24 @@ end
     @test [φ16[1 + k * 2^16] for k in 0:3] ≈ [0, s3, 1 - s3, 0] atol = 1e-2
 
     @test_throws ArgumentError cascade(WT_HAAR, 0)
+end
+
+@testset "DWT OK recursing on views" begin
+    x = rand(16, 16)
+    c = copy(x)
+    dwt!(x, WT_HAAR, 1)
+    y = @rtview x[:ll]
+    dwt!(y, WT_HAAR, 1)
+    idwt!(x, WT_HAAR, 2)
+    @test c ≈ x
+
+    x = rand(16, 16)
+    c = copy(x)
+    dwt!(x, WT_HAAR, 1)
+    y = @rtview x[:ll]
+    @rtview x[:ll] .= dwt(y, WT_HAAR, 1)
+    idwt!(x, WT_HAAR, 2)
+    @test c ≈ x
 end
 
 @testset "Aqua" begin

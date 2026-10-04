@@ -252,7 +252,7 @@ end
 
 Return a transformed copy of `x`. The copying form of [`dwt!`](@ref).
 """
-@fastfun function dwt(x::T, rest...; wpt = false, convention = :aligned) :: T where T
+@fastfun function dwt(x, rest...; wpt = false, convention = :aligned)
     dwt!(copy(x), rest...; wpt = wpt, convention = convention)
 end
 
@@ -262,7 +262,7 @@ end
 Return an inverse-transformed copy of `x`. The copying form of
 [`idwt!`](@ref).
 """
-@fastfun function idwt(x::T, rest...; wpt = false, convention = :aligned) :: T where T
+@fastfun function idwt(x, rest...; wpt = false, convention = :aligned)
     idwt!(copy(x), rest...; wpt = wpt, convention = convention)
 end
 

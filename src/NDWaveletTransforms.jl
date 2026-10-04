@@ -1,3 +1,20 @@
+"""
+    module NDWaveletTransforms
+
+N-dimensional wavelet transforms for Julia.
+
+Standard and nonstandard transforms are supported,
+in addition to wavelet packet decompositions. Other
+utilities include indexing into transforms, and
+cascading/denoising/cycle-spinning functions.
+
+Example usage:
+```julia    
+    x = rand(16, 16)
+    dwt!(x, WT_HAAR, 2)  # forward transform, 2-level
+    idwt!(x, WT_HAAR, 2) # inverse transform, 2-level
+```
+"""
 module NDWaveletTransforms
 
 macro fastfun(expr)
@@ -21,6 +38,7 @@ using Strided
 using KernelAbstractions
 using Adapt
 using GPUArraysCore: AbstractGPUArray
+using PrecompileTools
 
 include("algorithms.jl")
 export complement
@@ -54,6 +72,8 @@ include("subbands.jl")
 export rtree_views
 export rtree_view
 export @rtview
+export rtview 
+export rtviews
 
 include("innerloops.jl")
 include("innerloops-inverse.jl")
@@ -87,5 +107,7 @@ export nswpt!
 export nswpt
 export nsiwpt!
 export nsiwpt
+
+include("precompile.jl")
 
 end # module NDWaveletTransforms
