@@ -68,6 +68,10 @@ Base.@constprop :aggressive rtree_view(x, s...) =
 const rtview  = rtree_view
 const rtviews = rtree_views
 
+isbandname(ind) = ind isa Symbol ||
+                  (ind isa QuoteNode && ind.value isa Symbol) ||
+                  ind isa AbstractString
+
 """
     @rtview x[band]
 
@@ -82,10 +86,6 @@ Multiple bands chain from the outside in. Only references whose indices are
 all band names (`Symbol`, `String`, or `QuoteNode`) are rewritten; `a[1]` and
 `a[1:4]` are left alone.
 """
-isbandname(ind) = ind isa Symbol ||
-                  (ind isa QuoteNode && ind.value isa Symbol) ||
-                  ind isa AbstractString
-
 macro rtview(expr)
     rv  = GlobalRef(@__MODULE__, :rtree_view)
     out = postwalk(expr) do e
