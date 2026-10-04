@@ -38,6 +38,13 @@ transform.
 axis 1 and high along axis 2, and `:hh` is high along both. Indices run
 from `1` for all-low to `2^ndims(x)` for all-high.
 
+A name must have one letter per axis. `_` leaves that axis whole, so `:l_`
+is the low band along axis 1 across every axis-2 coefficient, and `:_l` is
+the low band along axis 2 across every axis-1 coefficient. This reaches the
+bands of an asymmetric transform: after `dwt!(x, WT_HAAR, (1, 2))`,
+`@rtview x[:ll, :_l]` is the approximation band one level deep along axis 1
+and two along axis 2.
+
 Chaining navigates a multi-level transform. After `dwt!(x, WT_D4, 2)`,
 `rtree_view(rtree_view(x, :ll), :ll)`, or `@rtview x[:ll, :ll]`, is the
 coarsest approximation band. The result is a `SubArray`, so writing to it
@@ -45,14 +52,26 @@ writes to `x`.
 """
 Base.@constprop :aggressive rtree_view(x, i::Int) = rtree_views(x)[i]
 
-Base.@constprop :aggressive lh_str_to_num(s :: String) =
-    parse(Int,
-        replace(s, r"(L|l)" => s"0", r"(H|h)" => s"1");
-        base=2
-    ) + 1
+@inline function band_axis(n::Int, c::Char)
+    if c == 'l' || c == 'L' # approximation band
+        return 1:(n >> 1)
+    elseif c == 'h' || c == 'H' # detail band
+        return (n >> 1) + 1:n
+    elseif c == '_' # both bands
+        return 1:n 
+    end
+    throw(ArgumentError("invalid subband character $(repr(c))"))
+end
+
+Base.@constprop :aggressive function band_ranges(x, s::String)
+    N = ndims(x)
+    length(s) == N || throw(ArgumentError(
+        "subband name \"$s\" has $(length(s)) letters; array has $N dimensions"))
+    return ntuple(i -> band_axis(size(x, i), s[i]), Val(N))
+end
 
 Base.@constprop :aggressive rtree_view(x, s::String) =
-    rtree_view(x, lh_str_to_num(s))
+    view(x, band_ranges(x, s)...)
 
 Base.@constprop :aggressive rtree_view(x, s::Symbol) =
     rtree_view(x, String(s))
@@ -81,10 +100,12 @@ broadcast:
 
     @rtview a[:ll] .= 0       # zero the approximation band
     b = @rtview a[:hl, :hh]   # HH band of the HL band
+    @rtview a[:ll, :_l]       # axis 2 twice down, axis 1 once
 
-Multiple bands chain from the outside in. Only references whose indices are
-all band names (`Symbol`, `String`, or `QuoteNode`) are rewritten; `a[1]` and
-`a[1:4]` are left alone.
+Multiple bands chain from the outside in, so `_` keeps whatever range an
+earlier name established. Only references whose indices are all band names
+(`Symbol`, `String`, or `QuoteNode`) are rewritten; `a[1]` and `a[1:4]` are
+left alone.
 """
 macro rtview(expr)
     rv  = GlobalRef(@__MODULE__, :rtree_view)

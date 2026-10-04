@@ -356,13 +356,50 @@ end
     @test rtree_view(x, 4) ≈ @view x[end>>1 + 1:end, end>>1 + 1:end]
 end
 
-@testset "rtree: band index string to number" begin
-    @test NDWaveletTransforms.lh_str_to_num("l") == 1
-    @test NDWaveletTransforms.lh_str_to_num("h") == 2
-    @test NDWaveletTransforms.lh_str_to_num("LL") == 1
-    @test NDWaveletTransforms.lh_str_to_num("LH") == 2
-    @test NDWaveletTransforms.lh_str_to_num("Hl") == 3
-    @test NDWaveletTransforms.lh_str_to_num("hH") == 4
+@testset "rtree: band ranges" begin
+    x = rand(8, 8)
+    @test NDWaveletTransforms.band_ranges(x, "ll") == (1:4, 1:4)
+    @test NDWaveletTransforms.band_ranges(x, "lh") == (1:4, 5:8)
+    @test NDWaveletTransforms.band_ranges(x, "hl") == (5:8, 1:4)
+    @test NDWaveletTransforms.band_ranges(x, "hh") == (5:8, 5:8)
+    @test NDWaveletTransforms.band_ranges(x, "_l") == (1:8, 1:4)
+    @test NDWaveletTransforms.band_ranges(x, "_h") == (1:8, 5:8)
+    @test NDWaveletTransforms.band_ranges(x, "l_") == (1:4, 1:8)
+    @test NDWaveletTransforms.band_ranges(x, "__") == (1:8, 1:8)
+    @test NDWaveletTransforms.band_ranges(x, "LH") == (1:4, 5:8)
+end
+
+@testset "rtree: bad band names" begin
+    x = rand(8, 8)
+    @test_throws ArgumentError rtree_view(x, :l)
+    @test_throws ArgumentError rtree_view(x, :lll)
+    @test_throws ArgumentError rtree_view(x, :_q)
+    y = rand(8)
+    @test_throws ArgumentError rtree_view(y, :ll)
+end
+
+@testset "rtree: underscore bands" begin
+    x = rand(8, 8)
+    @test rtree_view(x, :_l) ≈ @view x[:, 1:end>>1]
+    @test rtree_view(x, :_h) ≈ @view x[:, end>>1 + 1:end]
+    @test rtree_view(x, :l_) ≈ @view x[1:end>>1, :]
+    @test rtree_view(x, :__) ≈ x
+    @test rtree_view(x, :_l) ≈ rtree_view(x, "_l")
+
+    # chaining across axes and levels
+    y = rand(32, 32)
+    dwt!(y, WT_HAAR, (1, 2))
+    @test @rtview(y[:ll, :_l]) ≈ @view y[1:16, 1:8]
+    @test @rtview(y[:_l])      ≈ @view y[:, 1:16]
+
+    z = rand(8, 8, 8)
+    @test @rtview(z[:lll, :__l]) ≈ @view z[1:4, 1:4, 1:2]
+
+    # writing through a view touches only its band
+    v = @rtview x[:_l]
+    v .= 0
+    @test all(iszero, @view x[:, 1:4])
+    @test !(all(iszero, @view x[:, 5:8]))
 end
 
 @testset "rtree: fancy band indexing" begin
@@ -390,10 +427,10 @@ end
     @test rtree_view(x, :l) ≈ rtree_view(x, [:l])
     @test rtree_view(x, :h) ≈ rtree_view(x, [:h])
     x = rand(4, 4)
-    rtree_view(x, :ll) ≈ rtree_view(x, [:ll])
-    rtree_view(x, :lh) ≈ rtree_view(x, [:lh])
-    rtree_view(x, :hl) ≈ rtree_view(x, [:hl])
-    rtree_view(x, :hh) ≈ rtree_view(x, [:hh])
+    @test rtree_view(x, :ll) ≈ rtree_view(x, [:ll])
+    @test rtree_view(x, :lh) ≈ rtree_view(x, [:lh])
+    @test rtree_view(x, :hl) ≈ rtree_view(x, [:hl])
+    @test rtree_view(x, :hh) ≈ rtree_view(x, [:hh])
     x = rand(4, 4, 4)
     @test rtree_view(x, :lll) ≈ rtree_view(x, [:lll])
     @test rtree_view(x, :llh) ≈ rtree_view(x, [:llh])

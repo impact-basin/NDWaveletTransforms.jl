@@ -22,10 +22,10 @@ function view_case(T, dims, extra, convention)
     dwt!(x, WT_HAAR, 1; convention = convention)
 
     before = copy(x)
-    ll = rtree_view(x, :ll)
+    ll = rtree_view(x, 1)
     ref = copy(ll)
     outside = trues(size(x))
-    rtree_view(outside, :ll) .= false
+    rtree_view(outside, 1) .= false
 
     dwt!(ll, WT_HAAR, extra; convention = convention)
     @test ll ≈ dwt(ref, WT_HAAR, extra; convention = convention)
@@ -62,4 +62,20 @@ end
 
     idwt!(@rtview(x[:ll]), WT_HAAR, 2)
     @test @rtview(x[:ll]) ≈ ref
+end
+
+@testset "transforms on underscore views" begin
+    rng = VIEW_RNG
+    x = rand(rng, 32, 32)
+    dwt!(x, WT_HAAR, (1, 2))
+
+    # the (1, 2) transform is two levels deep on axis 2, one on axis 1
+    v = @rtview x[:ll, :_l]
+    @test size(v) == (16, 8)
+
+    ref = copy(v)
+    dwt!(v, WT_HAAR, 2)
+    @test v ≈ dwt(ref, WT_HAAR, 2)
+    idwt!(v, WT_HAAR, 2)
+    @test v ≈ ref
 end

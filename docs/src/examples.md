@@ -56,6 +56,15 @@ dwt(img, WT_D4, (1, 3))    # one level along axis 1, three along axis 2
 dwt(img, WT_D4, (3, 1))    # the other way round
 ```
 
+`@rtview` accept `_` as a "do-nothing" index. This is helpful when operating on signals transformed to different levels in different dimensions: for instance, `dwt!(x, WT_HAAR, (1,2))` might be indexed as `@rtview x[:ll, :_h].`
+
+For instance, the following returns the approximation band of a (1,3) transform.
+
+```julia
+c = dwt(img, WT_D4, (1, 3))
+@rtview c[:ll, :_l, :_l]
+```
+
 ![The same image at levels (1, 3) and (3, 1).](assets/levels.png)
 
 ## Transform flavours

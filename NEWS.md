@@ -13,3 +13,7 @@
   for `Float32` and `Float64` arguments under both phase conventions.
 - Added a docstring for the toplevel module.
 - Fixed a bug where `@rtview` was processing its arguments too aggressively; expressions like `@rtview x[:ll] .= 2y` now work as expected.
+
+## v1.2.3
+
+- `rtview`-family functions now accept `_` as a "do-nothing" index. This is helpful when operating on signals transformed to different levels in different dimensions: for instance, `dwt!(x, WT_HAAR, (1,2))` might be indexed as `@rtview x[:ll, :_h].`

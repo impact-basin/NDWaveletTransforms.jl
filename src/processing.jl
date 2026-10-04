@@ -198,7 +198,7 @@ end
 # the finest-scale details: everything outside the level-1 approximation band
 function _finest_details(c)
     mask = trues(size(c))
-    rtree_view(mask, :ll) .= false
+    rtree_view(mask, 1) .= false
     return c[mask]
 end
 

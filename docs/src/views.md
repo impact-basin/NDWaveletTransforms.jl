@@ -20,6 +20,16 @@ ll3 = @rtview x[:ll, :ll, :ll]   #  32x32:  3-level LL band
 @rtview x[:hh] .*= 0.5           # half the 1-level HH band
 ```
 
+Views accept `_` as a "do-nothing" index. This is helpful when operating on signals transformed to different levels in different dimensions. For instance,
+
+```julia
+x = rand(32, 32)
+dwt!(x, WT_HAAR, (1, 2))
+
+@rtview x[:ll, :_l] # 16x8:  deepest scaling band
+@rtview x[:_l]      # 32x16: scaling band of axis 2
+```
+
 `rtree_views(x)` returns every band at the current level as a tuple.
 This is often useful when e.g. plotting transforms.
 
